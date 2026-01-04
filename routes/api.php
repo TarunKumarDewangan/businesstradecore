@@ -44,9 +44,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/shops/{id}/toggle', [ShopController::class, 'toggleStatus']);
 
     // Category Routes
-    Route::get('/categories', [CategoryController::class, 'index']);
-    Route::post('/categories', [CategoryController::class, 'store']);
-    Route::delete('/categories/{id}', [CategoryController::class, 'destroy']);
+    Route::get('/categories', [App\Http\Controllers\Api\CategoryController::class, 'index']);
+    Route::post('/categories', [App\Http\Controllers\Api\CategoryController::class, 'store']);
+    Route::put('/categories/{id}', [App\Http\Controllers\Api\CategoryController::class, 'update']); // <--- NEW
+    Route::delete('/categories/{id}', [App\Http\Controllers\Api\CategoryController::class, 'destroy']);
+    Route::post('/categories/move-delete', [App\Http\Controllers\Api\CategoryController::class, 'moveAndDelete']);
 
     // Location Routes
     Route::get('/locations', [App\Http\Controllers\Api\LocationController::class, 'index']);
@@ -63,10 +65,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/shop-users', [App\Http\Controllers\Api\ShopUserController::class, 'index']);
     Route::post('/shop-users', [App\Http\Controllers\Api\ShopUserController::class, 'store']);
     Route::delete('/shop-users/{id}', [App\Http\Controllers\Api\ShopUserController::class, 'destroy']);
+    Route::put('/shop-users/{id}', [App\Http\Controllers\Api\ShopUserController::class, 'update']);
 
     // Billing Routes
     Route::get('/invoices', [App\Http\Controllers\Api\InvoiceController::class, 'index']);
     Route::post('/invoices', [App\Http\Controllers\Api\InvoiceController::class, 'store']);
+    Route::delete('/invoices/{id}', [App\Http\Controllers\Api\InvoiceController::class, 'destroy']);
 
 
     // Ledger Routes
@@ -120,4 +124,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/order/incoming', [App\Http\Controllers\Api\OrderController::class, 'incomingOrders']); // View Retailer Orders
 
     Route::get('/dashboard/counts', [App\Http\Controllers\Api\DashboardController::class, 'getCounts']);
+
+    // Master Manual Entry Routes
+    Route::get('/staff-status/{id}', [App\Http\Controllers\Api\StaffOpController::class, 'getStaffStatus']);
+    Route::post('/manual/punch', [App\Http\Controllers\Api\StaffOpController::class, 'manualPunch']);
+    Route::post('/manual/worklog', [App\Http\Controllers\Api\StaffOpController::class, 'manualWorkLog']);
 });

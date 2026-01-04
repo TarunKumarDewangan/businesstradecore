@@ -42,7 +42,7 @@ class ItemController extends Controller
                 'location:id,floor_name,rack_number,shelf_number'
             ])
             ->orderByDesc('id')
-            ->paginate(20);
+            ->paginate(10); // 10 records per page
 
         return response()->json([
             'status' => true,
@@ -57,6 +57,7 @@ class ItemController extends Controller
     {
         $request->validate([
             'category_id' => 'required|exists:categories,id',
+            'subcategory_id' => 'nullable|exists:categories,id', // Optional
             'item_name' => 'required|string',
             'selling_price' => 'required|numeric',
             'stock_quantity' => 'required|integer',
@@ -67,7 +68,7 @@ class ItemController extends Controller
         Item::create([
             'shop_id' => $user->shop_id,
             'category_id' => $request->category_id,
-            'subcategory_id' => $request->subcategory_id,
+            'subcategory_id' => $request->subcategory_id, // <--- Added
             'location_id' => $request->location_id,
             'item_name' => strtoupper($request->item_name),
             'part_number' => strtoupper($request->part_number),
@@ -94,18 +95,24 @@ class ItemController extends Controller
             ->where('shop_id', $user->shop_id)
             ->firstOrFail();
 
-        $item->update($request->only([
-            'selling_price',
-            'stock_quantity',
-            'location_id'
-        ]));
+        // Allow updating all relevant fields
+        $item->update([
+            'item_name' => strtoupper($request->item_name),
+            'part_number' => strtoupper($request->part_number),
+            'category_id' => $request->category_id,
+            'subcategory_id' => $request->subcategory_id, // <--- Added
+            'location_id' => $request->location_id,
+            'compatible_models' => strtoupper($request->compatible_models),
+            'selling_price' => $request->selling_price,
+            'stock_quantity' => $request->stock_quantity,
+            // We usually don't update purchase price here to keep history, but you can if needed
+        ]);
 
         return response()->json([
             'status' => true,
             'message' => 'Item Updated'
         ]);
     }
-
     /**
      * 4️⃣ Delete Item
      */

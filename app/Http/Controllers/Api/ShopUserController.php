@@ -99,4 +99,45 @@ class ShopUserController extends Controller
         }
         return response()->json(['status' => false, 'message' => 'User not found'], 404);
     }
+
+    // 4. Update User (Staff/Retailer)
+    public function update(Request $request, $id)
+    {
+        $user = Auth::user();
+        $targetUser = User::where('id', $id)->where('shop_id', $user->shop_id)->firstOrFail();
+
+        // Update Basic Info
+        $targetUser->name = $request->name;
+        $targetUser->phone = $request->phone;
+
+        // Update Password only if provided
+        if (!empty($request->password)) {
+            $targetUser->password = Hash::make($request->password);
+        }
+        $targetUser->save();
+
+        // Update Profile based on Type
+        if ($targetUser->role_id == 4) { // Staff
+            StaffProfile::updateOrCreate(
+                ['user_id' => $targetUser->id],
+                [
+                    'designation' => $request->designation,
+                    'salary' => $request->salary,
+                    'address' => $request->address
+                ]
+            );
+        } else { // Retailer
+            RetailerDetail::updateOrCreate(
+                ['user_id' => $targetUser->id],
+                [
+                    'retailer_shop_name' => $request->retailer_shop_name,
+                    'gst_number' => $request->gst_number,
+                    'credit_limit' => $request->credit_limit,
+                    'address' => $request->address
+                ]
+            );
+        }
+
+        return response()->json(['status' => true, 'message' => 'User Updated Successfully']);
+    }
 }

@@ -14,6 +14,65 @@ use Illuminate\Support\Facades\DB;
 
 class InvoiceController extends Controller
 {
+
+
+    // 3. Delete Invoice (Rollback Stock & Ledger)
+    public function destroy($id)
+    {
+        $user = Auth::user();
+
+        try {
+            DB::beginTransaction();
+
+            $invoice = Invoice::where('id', $id)->where('shop_id', $user->shop_id)->firstOrFail();
+
+            // A. Rollback Stock
+            foreach ($invoice->items as $item) {
+                $dbItem = Item::find($item->item_id);
+                if ($dbItem) {
+                    $dbItem->stock_quantity += $item->quantity; // Add back to stock
+                    $dbItem->save();
+                }
+            }
+
+            // B. Rollback Ledger (If Customer Linked)
+            if ($invoice->customer_id) {
+                $retailer = RetailerDetail::where('user_id', $invoice->customer_id)->first();
+                if ($retailer) {
+                    // Logic: We debited Grand Total and Credited Paid Amount.
+                    // To reverse: We Subtract (Grand Total - Paid) from current balance.
+                    $balanceToReduce = $invoice->grand_total - $invoice->paid_amount;
+
+                    if ($balanceToReduce > 0) {
+                        $retailer->current_balance -= $balanceToReduce;
+                        $retailer->save();
+                    }
+
+                    // Log the Cancellation in Ledger
+                    Transaction::create([
+                        'shop_id' => $user->shop_id,
+                        'user_id' => $invoice->customer_id,
+                        'type' => 'credit', // Credit reduces debt
+                        'amount' => $balanceToReduce,
+                        'description' => 'Invoice ' . $invoice->invoice_number . ' Cancelled',
+                        'reference_id' => $invoice->id,
+                        'balance_after' => $retailer->current_balance,
+                        'date' => now()
+                    ]);
+                }
+            }
+
+            // C. Delete Invoice (Cascades to items)
+            $invoice->delete();
+
+            DB::commit();
+            return response()->json(['status' => true, 'message' => 'Invoice Cancelled & Stock Restored']);
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
     /**
      * 1. Create New Invoice & Handle Stock/Ledger (Full Accounting)
      */
@@ -180,13 +239,29 @@ class InvoiceController extends Controller
     /**
      * 2. List Invoices
      */
-    public function index()
+    // 2. List Invoices (With Search)
+    public function index(Request $request)
     {
         $user = Auth::user();
-        $invoices = Invoice::where('shop_id', $user->shop_id)
-            ->with(['customer', 'items'])
-            ->orderBy('id', 'desc')
-            ->paginate(20);
+        $query = Invoice::where('shop_id', $user->shop_id)
+            ->with(['customer', 'items']); // Load relations
+
+        // SEARCH FILTER
+        if ($request->has('search') && !empty($request->search)) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('invoice_number', 'LIKE', "%{$search}%")
+                    ->orWhere('customer_name', 'LIKE', "%{$search}%")
+                    ->orWhere('customer_phone', 'LIKE', "%{$search}%")
+                    // Also search in linked User table for retailers
+                    ->orWhereHas('customer', function ($q2) use ($search) {
+                        $q2->where('name', 'LIKE', "%{$search}%")
+                            ->orWhere('phone', 'LIKE', "%{$search}%");
+                    });
+            });
+        }
+
+        $invoices = $query->orderBy('id', 'desc')->paginate(20);
 
         return response()->json(['status' => true, 'data' => $invoices]);
     }

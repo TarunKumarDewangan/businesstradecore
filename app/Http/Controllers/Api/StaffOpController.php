@@ -121,4 +121,78 @@ class StaffOpController extends Controller
 
         return response()->json(['status' => true, 'data' => $logs]);
     }
+
+    public function getStaffStatus($id)
+    {
+        $master = Auth::user();
+
+        // Security: Ensure staff belongs to Master's shop
+        $staff = \App\Models\User::where('id', $id)->where('shop_id', $master->shop_id)->first();
+        if (!$staff)
+            return response()->json(['status' => false, 'message' => 'Staff not found']);
+
+        $today = now()->format('Y-m-d');
+
+        $attendance = Attendance::where('user_id', $id)
+            ->where('date', $today)
+            ->orderBy('id', 'desc')
+            ->first();
+
+        return response()->json(['status' => true, 'data' => $attendance]);
+    }
+
+    // 7. Manual Punch by Master
+    public function manualPunch(Request $request)
+    {
+        $request->validate(['user_id' => 'required|exists:users,id']);
+        $master = Auth::user();
+        $targetUserId = $request->user_id;
+
+        // Security Check
+        $staff = \App\Models\User::where('id', $targetUserId)->where('shop_id', $master->shop_id)->first();
+        if (!$staff)
+            return response()->json(['status' => false, 'message' => 'Unauthorized']);
+
+        $today = now()->format('Y-m-d');
+        $now = now()->format('H:i:s');
+
+        $latest = Attendance::where('user_id', $targetUserId)->where('date', $today)->orderBy('id', 'desc')->first();
+
+        // Logic: Same as self-punch, but for target user
+        if (!$latest || $latest->check_out) {
+            Attendance::create([
+                'shop_id' => $master->shop_id,
+                'user_id' => $targetUserId,
+                'date' => $today,
+                'check_in' => $now,
+                'status' => 'present'
+            ]);
+            return response()->json(['status' => true, 'message' => 'Staff Checked In Successfully']);
+        } else {
+            $latest->update(['check_out' => $now]);
+            return response()->json(['status' => true, 'message' => 'Staff Checked Out Successfully']);
+        }
+    }
+
+    // 8. Manual Work Log by Master
+    public function manualWorkLog(Request $request)
+    {
+        $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'title' => 'required',
+            'description' => 'nullable'
+        ]);
+
+        $master = Auth::user();
+
+        WorkLog::create([
+            'shop_id' => $master->shop_id,
+            'user_id' => $request->user_id,
+            'date' => now()->format('Y-m-d'),
+            'title' => $request->title,
+            'description' => $request->description . ' (Added by Admin)'
+        ]);
+
+        return response()->json(['status' => true, 'message' => 'Work Log Added for Staff']);
+    }
 }
