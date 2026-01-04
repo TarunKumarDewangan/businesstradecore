@@ -1,0 +1,124 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use App\Models\Attendance;
+use App\Models\WorkLog;
+use Illuminate\Support\Facades\Auth;
+
+class StaffOpController extends Controller
+{
+    // ================= ATTENDANCE =================
+
+    // 1. Get Latest Status for Today
+    public function todayStatus()
+    {
+        $user = Auth::user();
+        // USE NOW() to get India Time
+        $today = now()->format('Y-m-d');
+
+        $attendance = Attendance::where('user_id', $user->id)
+            ->where('date', $today)
+            ->orderBy('id', 'desc')
+            ->first();
+
+        return response()->json(['status' => true, 'data' => $attendance]);
+    }
+
+    // 2. Punch In / Out (Supports Multiple Shifts)
+    public function punch(Request $request)
+    {
+        $user = Auth::user();
+
+        // USE NOW() to get India Time
+        $today = now()->format('Y-m-d');
+        $now = now()->format('H:i:s');
+
+        $latestAttendance = Attendance::where('user_id', $user->id)
+            ->where('date', $today)
+            ->orderBy('id', 'desc')
+            ->first();
+
+        // SCENARIO A: New Check In
+        if (!$latestAttendance || $latestAttendance->check_out) {
+            Attendance::create([
+                'shop_id' => $user->shop_id,
+                'user_id' => $user->id,
+                'date' => $today,
+                'check_in' => $now,
+                'status' => 'present'
+            ]);
+            return response()->json(['status' => true, 'message' => 'Checked In! ☀️']);
+        }
+
+        // SCENARIO B: Check Out
+        else {
+            $latestAttendance->update(['check_out' => $now]);
+            return response()->json(['status' => true, 'message' => 'Checked Out! 🌙']);
+        }
+    }
+
+    // 3. Get All Attendance
+    public function indexAttendance()
+    {
+        $user = Auth::user();
+
+        $data = Attendance::where('shop_id', $user->shop_id)
+            ->with('user:id,name')
+            ->orderBy('date', 'desc')
+            ->orderBy('check_in', 'desc')
+            ->limit(50)
+            ->get();
+
+        $formattedData = $data->map(function ($item) {
+            return [
+                'id' => $item->id,
+                'date' => $item->date,
+                'staff_name' => $item->user ? $item->user->name : 'Unknown',
+                'check_in' => $item->check_in,
+                'check_out' => $item->check_out,
+                'status' => $item->status
+            ];
+        });
+
+        return response()->json(['status' => true, 'data' => $formattedData]);
+    }
+
+    // ================= WORK LOGS =================
+
+    // 4. Submit Work Log
+    public function storeWorkLog(Request $request)
+    {
+        $request->validate([
+            'title' => 'required',
+            'description' => 'nullable'
+        ]);
+
+        $user = Auth::user();
+
+        WorkLog::create([
+            'shop_id' => $user->shop_id,
+            'user_id' => $user->id,
+            'date' => now()->format('Y-m-d'), // Use India Time
+            'title' => $request->title,
+            'description' => $request->description
+        ]);
+
+        return response()->json(['status' => true, 'message' => 'Work Report Submitted']);
+    }
+
+    // 5. Get Work Logs
+    public function indexWorkLogs()
+    {
+        $user = Auth::user();
+        $logs = WorkLog::where('shop_id', $user->shop_id)
+            ->with('user:id,name')
+            ->orderBy('date', 'desc')
+            ->limit(20)
+            ->get();
+
+        return response()->json(['status' => true, 'data' => $logs]);
+    }
+}
