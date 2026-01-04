@@ -1,18 +1,23 @@
 <?php
 
 return [
-
     /*
-    |--------------------------------------------------------------------------
-    | Cross-Origin Resource Sharing (CORS) Configuration
-    |--------------------------------------------------------------------------
-    */
+        |--------------------------------------------------------------------------
+        | Cross-Origin Resource Sharing (CORS) Configuration
+        |--------------------------------------------------------------------------
+        */
 
     'paths' => ['api/*', 'sanctum/csrf-cookie'],
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['*'], // Allows all domains (Good for dev)
+    // Allow Localhost AND Live Domain
+    'allowed_origins' => [
+        'http://localhost:5173',      // Vite Local
+        'http://127.0.0.1:5173',      // Vite IP
+        'https://businesstradecore.in', // Live Site (HTTPS)
+        'http://businesstradecore.in',  // Live Site (HTTP)
+    ],
 
     'allowed_origins_patterns' => [],
 
@@ -22,6 +27,5 @@ return [
 
     'max_age' => 0,
 
-    'supports_credentials' => false, // Keep false if using token auth without cookies
-
+    'supports_credentials' => true, // Changed to true often helps with Sanctum
 ];
