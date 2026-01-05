@@ -116,6 +116,9 @@ class ItemController extends Controller
     /**
      * 4️⃣ Delete Item
      */
+    /**
+     * 4️⃣ Delete Item (Safe)
+     */
     public function destroy($id)
     {
         $user = Auth::user();
@@ -124,11 +127,25 @@ class ItemController extends Controller
             ->where('shop_id', $user->shop_id)
             ->firstOrFail();
 
-        $item->delete();
+        try {
+            $item->delete();
+            return response()->json([
+                'status' => true,
+                'message' => 'Item Deleted'
+            ]);
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Error Code 23000 means Integrity Constraint Violation (Foreign Key)
+            if ($e->getCode() == "23000") {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Cannot delete: This item is linked to existing Invoices or Orders.'
+                ], 400);
+            }
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Item Deleted'
-        ]);
+            return response()->json([
+                'status' => false,
+                'message' => 'Server Error: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }
