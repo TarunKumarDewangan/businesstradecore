@@ -163,8 +163,10 @@ const ItemManager = () => {
             await api.delete(`/items/${id}`, { headers });
             toast.success('Item Deleted');
             loadItems(page, searchTerm);
-        } catch {
-            toast.error('Delete failed');
+        } catch (error) {
+            // SHOW SERVER ERROR MESSAGE
+            const reason = error.response?.data?.message || 'Delete failed';
+            toast.error(reason);
         }
     };
 
