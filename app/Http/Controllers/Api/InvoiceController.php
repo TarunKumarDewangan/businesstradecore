@@ -240,11 +240,13 @@ class InvoiceController extends Controller
      * 2. List Invoices
      */
     // 2. List Invoices (With Search)
+    // 2. List Invoices
     public function index(Request $request)
     {
         $user = Auth::user();
         $query = Invoice::where('shop_id', $user->shop_id)
-            ->with(['customer', 'items']); // Load relations
+            // IMPORTANT: Load 'retailerDetail' through the customer relationship
+            ->with(['customer.retailerDetail', 'items']);
 
         // SEARCH FILTER
         if ($request->has('search') && !empty($request->search)) {
@@ -253,7 +255,6 @@ class InvoiceController extends Controller
                 $q->where('invoice_number', 'LIKE', "%{$search}%")
                     ->orWhere('customer_name', 'LIKE', "%{$search}%")
                     ->orWhere('customer_phone', 'LIKE', "%{$search}%")
-                    // Also search in linked User table for retailers
                     ->orWhereHas('customer', function ($q2) use ($search) {
                         $q2->where('name', 'LIKE', "%{$search}%")
                             ->orWhere('phone', 'LIKE', "%{$search}%");

@@ -36,11 +36,8 @@ const InvoiceHistory = () => {
 
     useEffect(() => { loadData(); }, []);
 
-    // Search Handler
     useEffect(() => {
-        const timer = setTimeout(() => {
-            loadData(searchTerm);
-        }, 500);
+        const timer = setTimeout(() => { loadData(searchTerm); }, 500);
         return () => clearTimeout(timer);
     }, [searchTerm]);
 
@@ -80,7 +77,7 @@ const InvoiceHistory = () => {
                 <h4>Sales History</h4>
                 <input
                     type="text"
-                    className="form-control w-25"
+                    className="form-control w-25 shadow-sm"
                     placeholder="🔍 Search Invoice / Name / Phone..."
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
@@ -105,10 +102,21 @@ const InvoiceHistory = () => {
                             {invoices.length === 0 ? (
                                 <tr><td colSpan="8" className="text-center p-5">No Invoices Found</td></tr>
                             ) : invoices.map(inv => {
-                                // Logic to get Phone: Use registered phone if exists, else manual phone
+                                // 1. Get Phone
                                 const phone = inv.customer?.phone || inv.customer_phone || 'N/A';
-                                // Logic for Type
-                                const type = inv.customer ? 'Retailer' : 'Walk-in';
+
+                                // 2. Determine Type (Strict Logic)
+                                let typeLabel = 'Walk-in';
+                                let typeBadge = 'secondary'; // Grey for Walk-in
+
+                                if (inv.customer) {
+                                    // Check the flag from DB
+                                    const dbType = inv.customer.retailer_detail?.customer_type;
+                                    if (dbType === 'b2b') {
+                                        typeLabel = 'Retailer';
+                                        typeBadge = 'primary'; // Blue for Retailer
+                                    }
+                                }
 
                                 return (
                                     <tr key={inv.id}>
@@ -119,17 +127,19 @@ const InvoiceHistory = () => {
                                             <br/><small className="text-muted">{phone}</small>
                                         </td>
                                         <td>
-                                            <Badge bg={type === 'Retailer' ? 'primary' : 'secondary'}>{type}</Badge>
+                                            <Badge bg={typeBadge}>{typeLabel}</Badge>
                                         </td>
                                         <td className="fw-bold">₹{inv.grand_total}</td>
                                         <td><Badge bg="success">{inv.payment_mode.toUpperCase()}</Badge></td>
                                         <td className="text-center">
-                                            <button className="btn btn-sm btn-outline-primary me-2" onClick={() => handleView(inv)}>
-                                                🖨 Print
-                                            </button>
-                                            <button className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(inv.id)}>
-                                                🗑️
-                                            </button>
+                                            <div className="btn-group">
+                                                <button className="btn btn-sm btn-outline-primary" onClick={() => handleView(inv)}>
+                                                    🖨 Print
+                                                </button>
+                                                <button className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(inv.id)}>
+                                                    🗑️
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 );
@@ -195,7 +205,7 @@ const InvoiceHistory = () => {
                     )}
                 </Modal.Body>
                 <Modal.Footer>
-                    <Button variant="secondary" onClick={() => setShowModal(false)}>Close</Button>
+                <Button variant="secondary" onClick={() => setShowModal(false)}>Close</Button>
                     <Button variant="success" onClick={handlePrint}>Print Bill</Button>
                 </Modal.Footer>
             </Modal>
