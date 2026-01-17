@@ -3,8 +3,10 @@ import api from '../api/axios';
 import { toast } from 'react-toastify';
 
 const SettingsManager = () => {
-    // Shop State
-    const [shop, setShop] = useState({ shop_name: '', gst_number: '' });
+    // Shop State (Added allowed_radius)
+    const [shop, setShop] = useState({
+        shop_name: '', gst_number: '', latitude: '', longitude: '', allowed_radius: 100
+    });
     const [logo, setLogo] = useState(null);
     const [preview, setPreview] = useState(null);
 
@@ -32,7 +34,10 @@ const SettingsManager = () => {
         const formData = new FormData();
         formData.append('shop_name', shop.shop_name);
         formData.append('gst_number', shop.gst_number || '');
-        formData.append('address', '123 Main St');
+        formData.append('latitude', shop.latitude || '');
+        formData.append('longitude', shop.longitude || '');
+        formData.append('allowed_radius', shop.allowed_radius || 100); // Send Radius
+
         if(logo) formData.append('logo', logo);
 
         try {
@@ -40,7 +45,7 @@ const SettingsManager = () => {
             const res = await api.post('/settings/shop', formData, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            if(res.data.status) toast.success('Shop Details Updated! 🏪');
+            if(res.data.status) toast.success('Settings Updated! ✅');
         } catch (err) {
             toast.error('Update Failed');
         }
@@ -102,9 +107,23 @@ const SettingsManager = () => {
                                     <label className="form-label small text-muted">GST / Tax ID</label>
                                     <input className="form-control" value={shop.gst_number || ''} onChange={e => setShop({...shop, gst_number: e.target.value})} />
                                 </div>
-                                <div className="mb-3">
-                                    <label className="form-label small text-muted">Address (For Bill)</label>
-                                    <textarea className="form-control" rows="2" placeholder="Enter Shop Address"></textarea>
+
+                                <div className="row">
+                                    <div className="col-4 mb-3">
+                                        <label className="form-label small text-muted">Latitude</label>
+                                        <input className="form-control" value={shop.latitude || ''} onChange={e => setShop({...shop, latitude: e.target.value})} placeholder="20.71.." />
+                                    </div>
+                                    <div className="col-4 mb-3">
+                                        <label className="form-label small text-muted">Longitude</label>
+                                        <input className="form-control" value={shop.longitude || ''} onChange={e => setShop({...shop, longitude: e.target.value})} placeholder="81.55.." />
+                                    </div>
+                                    <div className="col-4 mb-3">
+                                        <label className="form-label small text-muted">Radius (m)</label>
+                                        <input type="number" className="form-control" value={shop.allowed_radius} onChange={e => setShop({...shop, allowed_radius: e.target.value})} placeholder="100" />
+                                    </div>
+                                </div>
+                                <div className="form-text text-center mb-3">
+                                    <small>Staff must be within <strong>{shop.allowed_radius} meters</strong> to punch in.</small>
                                 </div>
 
                                 <button className="btn btn-primary w-100 fw-bold">Save Profile</button>
@@ -121,15 +140,15 @@ const SettingsManager = () => {
                             <form onSubmit={handlePassChange}>
                                 <div className="mb-3">
                                     <label className="form-label small text-muted">Current Password</label>
-                                    <input type="password" className="form-control" value={pass.current} onChange={e => setPass({...pass, current: e.target.value})} required />
+                                    <input type="password" class="form-control" value={pass.current} onChange={e => setPass({...pass, current: e.target.value})} required />
                                 </div>
                                 <div className="mb-3">
                                     <label className="form-label small text-muted">New Password</label>
-                                    <input type="password" className="form-control" value={pass.new} onChange={e => setPass({...pass, new: e.target.value})} required />
+                                    <input type="password" class="form-control" value={pass.new} onChange={e => setPass({...pass, new: e.target.value})} required />
                                 </div>
                                 <div className="mb-4">
                                     <label className="form-label small text-muted">Confirm Password</label>
-                                    <input type="password" className="form-control" value={pass.confirm} onChange={e => setPass({...pass, confirm: e.target.value})} required />
+                                    <input type="password" class="form-control" value={pass.confirm} onChange={e => setPass({...pass, confirm: e.target.value})} required />
                                 </div>
                                 <button className="btn btn-danger w-100 fw-bold">Update Password</button>
                             </form>

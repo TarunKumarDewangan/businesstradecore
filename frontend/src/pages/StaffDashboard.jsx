@@ -5,7 +5,7 @@ import Loader from '../components/Loader';
 
 const StaffDashboard = () => {
     const [loading, setLoading] = useState(true);
-    const [attendance, setAttendance] = useState(null); // null, or object
+    const [attendance, setAttendance] = useState(null);
     const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString());
 
     // Work Log State
@@ -36,21 +36,40 @@ const StaffDashboard = () => {
 
     useEffect(() => { fetchStatus(); }, []);
 
-    // 3. Handle Punch In/Out
-    const handlePunch = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const res = await api.post('/staff/punch', {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-
-            if (res.data.status) {
-                toast.success(res.data.message);
-                fetchStatus(); // Refresh to update button state
-            }
-        } catch (error) {
-            toast.error(error.response?.data?.message || 'Action failed');
+    // 3. Handle Punch In/Out (With GPS)
+    const handlePunch = () => {
+        if (!navigator.geolocation) {
+            return toast.error("Geolocation is not supported by this browser.");
         }
+
+        toast.info("Getting Location...");
+
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+
+                try {
+                    const token = localStorage.getItem('token');
+                    // Send Lat/Lng to Backend
+                    const res = await api.post('/staff/punch', { lat, lng }, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+
+                    if (res.data.status) {
+                        toast.success(res.data.message);
+                        fetchStatus(); // Refresh UI
+                    }
+                } catch (error) {
+                    // Show Backend Error (e.g., "You are too far!")
+                    toast.error(error.response?.data?.message || 'Action failed');
+                }
+            },
+            (error) => {
+                toast.error("Please Allow Location Access to Punch In.");
+            },
+            { enableHighAccuracy: true } // Request precise GPS
+        );
     };
 
     // 4. Submit Work Log
@@ -86,10 +105,6 @@ const StaffDashboard = () => {
 
                     {loading ? <Loader /> : (
                         <div className="mt-4">
-                            {/* LOGIC: Show Punch IN if:
-                                1. No record exists (attendance is null)
-                                2. OR The latest record has a check_out time (Session Closed)
-                            */}
                             {!attendance || attendance.check_out ? (
                                 <div>
                                     {attendance && attendance.check_out && (
@@ -109,7 +124,6 @@ const StaffDashboard = () => {
                                     </p>
                                 </div>
                             ) : (
-                                // Show Punch OUT if currently checked in
                                 <div>
                                     <div className="alert alert-success d-inline-block px-4 py-1 rounded-pill mb-3">
                                         Currently Working (In: {attendance.check_in})

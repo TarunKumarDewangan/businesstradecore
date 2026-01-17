@@ -17,9 +17,9 @@ return new class extends Migration {
             $table->index('shop_id');
 
             /* =========================
-               CATEGORY
+               CATEGORY (NOW OPTIONAL)
             ========================= */
-            $table->unsignedBigInteger('category_id');
+            $table->unsignedBigInteger('category_id')->nullable(); // <--- MADE NULLABLE
             $table->index('category_id');
 
             /* =========================
@@ -61,7 +61,7 @@ return new class extends Migration {
             $table->foreign('category_id', 'fk_items_category')
                 ->references('id')
                 ->on('categories')
-                ->restrictOnDelete();
+                ->nullOnDelete(); // <--- Changed to nullOnDelete
 
             $table->foreign('subcategory_id', 'fk_items_subcategory')
                 ->references('id')

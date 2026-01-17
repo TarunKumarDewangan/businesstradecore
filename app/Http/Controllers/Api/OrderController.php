@@ -242,4 +242,102 @@ class OrderController extends Controller
             return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
         }
     }
+    public function cancelOrder($id)
+    {
+        $user = Auth::user();
+        $order = Order::where('id', $id)->where('retailer_id', $user->id)->firstOrFail();
+
+        if ($order->status !== 'pending') {
+            return response()->json(['status' => false, 'message' => 'Cannot cancel processed order'], 400);
+        }
+
+        $order->delete(); // Cascades to items
+        return response()->json(['status' => true, 'message' => 'Order Cancelled Successfully']);
+    }
+
+    public function updateOrder(Request $request, $id)
+    {
+        $request->validate([
+            'items' => 'required|array', // List of { item_id, quantity }
+        ]);
+
+        $user = Auth::user();
+        $order = Order::where('id', $id)->where('retailer_id', $user->id)->firstOrFail();
+
+        if ($order->status !== 'pending') {
+            return response()->json(['status' => false, 'message' => 'Cannot modify processed order'], 400);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            foreach ($request->items as $itemData) {
+                // If Qty is 0, Delete Item. Else Update.
+                if ($itemData['quantity'] <= 0) {
+                    OrderItem::where('order_id', $order->id)->where('item_id', $itemData['item_id'])->delete();
+                } else {
+                    OrderItem::where('order_id', $order->id)
+                        ->where('item_id', $itemData['item_id'])
+                        ->update(['requested_qty' => $itemData['quantity']]);
+                }
+            }
+
+            // If order becomes empty, delete it
+            if ($order->items()->count() == 0) {
+                $order->delete();
+                DB::commit();
+                return response()->json(['status' => true, 'message' => 'Order empty, deleted.']);
+            }
+
+            DB::commit();
+            return response()->json(['status' => true, 'message' => 'Order Updated Successfully']);
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+    // 6. Master: Manual Order Creation (On behalf of Retailer)
+    public function createOrderManual(Request $request)
+    {
+        $request->validate([
+            'retailer_id' => 'required|exists:users,id',
+            'items' => 'required|array|min:1',
+            'items.*.id' => 'required|exists:items,id',
+            'items.*.quantity' => 'required|integer|min:1'
+        ]);
+
+        $user = Auth::user(); // The Master
+
+        try {
+            DB::beginTransaction();
+
+            $ordNum = 'ORD-' . strtoupper(substr(uniqid(), -6));
+
+            $order = Order::create([
+                'shop_id' => $user->shop_id,
+                'retailer_id' => $request->retailer_id, // Selected Retailer
+                'order_number' => $ordNum,
+                'status' => 'pending'
+            ]);
+
+            foreach ($request->items as $cartItem) {
+                $dbItem = Item::find($cartItem['id']);
+
+                OrderItem::create([
+                    'order_id' => $order->id,
+                    'item_id' => $dbItem->id,
+                    'requested_qty' => $cartItem['quantity'],
+                    'unit_price' => $dbItem->selling_price
+                ]);
+            }
+
+            DB::commit();
+            return response()->json(['status' => true, 'message' => 'Manual Order Created!', 'order_number' => $ordNum]);
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
 }

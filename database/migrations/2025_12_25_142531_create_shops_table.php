@@ -16,9 +16,16 @@ return new class extends Migration {
             $table->string('shop_logo')->nullable();
             $table->string('gst_number')->nullable();
             $table->boolean('is_active')->default(true); // For SuperAdmin to ban/activate
+
+            // Geofencing Columns
+            $table->decimal('latitude', 10, 7)->nullable();
+            $table->decimal('longitude', 10, 7)->nullable();
+            $table->integer('allowed_radius')->default(100); // Meters (Default 100m)
+
             $table->timestamps();
         });
     }
+
     /**
      * Reverse the migrations.
      */

@@ -41,6 +41,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Shop Management Routes
     Route::get('/shops', [ShopController::class, 'index']);
     Route::post('/shops', [ShopController::class, 'store']);
+    Route::put('/shops/{id}', [App\Http\Controllers\Api\ShopController::class, 'update']); // Update
+    Route::delete('/shops/{id}', [App\Http\Controllers\Api\ShopController::class, 'destroy']); // Delete
     Route::post('/shops/{id}/toggle', [ShopController::class, 'toggleStatus']);
 
     // Category Routes
@@ -106,6 +108,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/order/place', [App\Http\Controllers\Api\OrderController::class, 'placeOrder']); // Place Order
     Route::get('/order/my-history', [App\Http\Controllers\Api\OrderController::class, 'myOrders']); // Retailer History
     Route::post('/order/{id}/dispatch', [App\Http\Controllers\Api\OrderController::class, 'dispatchOrder']);
+    Route::post('/order/{id}/cancel', [App\Http\Controllers\Api\OrderController::class, 'cancelOrder']);
+    Route::post('/order/{id}/update', [App\Http\Controllers\Api\OrderController::class, 'updateOrder']);
+    Route::post('/order/manual', [App\Http\Controllers\Api\OrderController::class, 'createOrderManual']);
 
     // ==========================
     // RETURNS MANAGEMENT

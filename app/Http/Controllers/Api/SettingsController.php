@@ -20,27 +20,29 @@ class SettingsController extends Controller
         return response()->json(['status' => true, 'data' => $shop]);
     }
 
-    // 2. Update Shop Details (Name, Address, Logo)
+    // 2. Update Shop Details (Including Geo Location)
     public function updateShop(Request $request)
     {
         $request->validate([
             'shop_name' => 'required',
-            'address' => 'required', // We will add this column to DB
-            'logo' => 'nullable|image|max:2048' // Max 2MB
+            'latitude' => 'nullable',
+            'longitude' => 'nullable',
+            'allowed_radius' => 'nullable|integer|min:10', // Validate Radius
+            'logo' => 'nullable|image|max:2048'
         ]);
 
         $user = Auth::user();
         $shop = Shop::find($user->shop_id);
 
         $shop->shop_name = $request->shop_name;
-        // We need to add 'address' column to shops table first!
-        // For now, let's assume we use 'gst_number' field for address or add a migration.
-        // Let's stick to updating existing fields + GST.
         $shop->gst_number = $request->gst_number;
+        $shop->latitude = $request->latitude;
+        $shop->longitude = $request->longitude;
 
-        // Handle Logo Upload
+        // Use provided radius OR default to 100 if empty
+        $shop->allowed_radius = $request->allowed_radius ?? 100;
+
         if ($request->hasFile('logo')) {
-            // Delete old logo if exists
             if ($shop->shop_logo) {
                 Storage::delete($shop->shop_logo);
             }
@@ -50,7 +52,48 @@ class SettingsController extends Controller
 
         $shop->save();
 
-        return response()->json(['status' => true, 'message' => 'Shop Settings Updated', 'logo_url' => asset('storage/' . $shop->shop_logo)]);
+        return response()->json([
+            'status' => true,
+            'message' => 'Settings Updated',
+            'logo_url' => asset('storage/' . $shop->shop_logo)
+        ]);
+    }
+    public function updateShop(Request $request)
+    {
+        $request->validate([
+            'shop_name' => 'required',
+            'latitude' => 'nullable',
+            'longitude' => 'nullable',
+            'allowed_radius' => 'nullable|integer|min:10', // Validate Radius
+            'logo' => 'nullable|image|max:2048'
+        ]);
+
+        $user = Auth::user();
+        $shop = Shop::find($user->shop_id);
+
+        $shop->shop_name = $request->shop_name;
+        $shop->gst_number = $request->gst_number;
+        $shop->latitude = $request->latitude;
+        $shop->longitude = $request->longitude;
+
+        // Use provided radius OR default to 100 if empty
+        $shop->allowed_radius = $request->allowed_radius ?? 100;
+
+        if ($request->hasFile('logo')) {
+            if ($shop->shop_logo) {
+                Storage::delete($shop->shop_logo);
+            }
+            $path = $request->file('logo')->store('logos', 'public');
+            $shop->shop_logo = $path;
+        }
+
+        $shop->save();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Settings Updated',
+            'logo_url' => asset('storage/' . $shop->shop_logo)
+        ]);
     }
 
     // 3. Change Password
@@ -58,7 +101,7 @@ class SettingsController extends Controller
     {
         $request->validate([
             'current_password' => 'required',
-            'new_password' => 'required|min:6|confirmed' // expects new_password_confirmation field
+            'new_password' => 'required|min:6|confirmed'
         ]);
 
         $user = Auth::user();

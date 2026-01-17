@@ -28,11 +28,45 @@ class StaffOpController extends Controller
     }
 
     // 2. Punch In / Out (Supports Multiple Shifts)
+    // 2. Punch In / Out (With Geofencing)
     public function punch(Request $request)
     {
         $user = Auth::user();
+        $shop = \App\Models\Shop::find($user->shop_id);
 
-        // USE NOW() to get India Time
+        // 1. Check Geofencing (Only if Shop has coords set)
+        if ($shop->latitude && $shop->longitude) {
+            $lat1 = $request->lat;
+            $lon1 = $request->lng;
+
+            if (!$lat1 || !$lon1) {
+                return response()->json(['status' => false, 'message' => 'Location permission required! Enable GPS.'], 400);
+            }
+
+            // Haversine Formula for Distance
+            $earthRadius = 6371000; // Meters
+            $latFrom = deg2rad($lat1);
+            $lonFrom = deg2rad($lon1);
+            $latTo = deg2rad($shop->latitude);
+            $lonTo = deg2rad($shop->longitude);
+
+            $latDelta = $latTo - $latFrom;
+            $lonDelta = $lonTo - $lonFrom;
+
+            $angle = 2 * asin(sqrt(pow(sin($latDelta / 2), 2) +
+                cos($latFrom) * cos($latTo) * pow(sin($lonDelta / 2), 2)));
+
+            $distance = $angle * $earthRadius; // Distance in Meters
+
+            if ($distance > $shop->allowed_radius) {
+                return response()->json([
+                    'status' => false,
+                    'message' => "You are too far! Distance: " . round($distance) . "m. Please go to the shop."
+                ], 403);
+            }
+        }
+
+        // 2. Proceed with Attendance Logic
         $today = now()->format('Y-m-d');
         $now = now()->format('H:i:s');
 
@@ -41,20 +75,18 @@ class StaffOpController extends Controller
             ->orderBy('id', 'desc')
             ->first();
 
-        // SCENARIO A: New Check In
         if (!$latestAttendance || $latestAttendance->check_out) {
             Attendance::create([
                 'shop_id' => $user->shop_id,
                 'user_id' => $user->id,
                 'date' => $today,
                 'check_in' => $now,
-                'status' => 'present'
+                'status' => 'present',
+                'punch_lat' => $request->lat,
+                'punch_long' => $request->lng
             ]);
             return response()->json(['status' => true, 'message' => 'Checked In! ☀️']);
-        }
-
-        // SCENARIO B: Check Out
-        else {
+        } else {
             $latestAttendance->update(['check_out' => $now]);
             return response()->json(['status' => true, 'message' => 'Checked Out! 🌙']);
         }
