@@ -35,4 +35,8 @@ class Order extends Model
     {
         return $this->belongsTo(Invoice::class);
     }
+    public function returnRequests()
+    {
+        return $this->hasMany(ReturnRequest::class, 'order_id');
+    }
 }

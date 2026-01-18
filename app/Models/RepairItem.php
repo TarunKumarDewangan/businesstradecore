@@ -18,8 +18,8 @@ class RepairItem extends Model
         'total_price'
     ];
 
-    public function item()
+    public function repair()
     {
-        return $this->belongsTo(Item::class);
+        return $this->belongsTo(Repair::class);
     }
 }

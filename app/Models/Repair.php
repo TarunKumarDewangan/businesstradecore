@@ -18,9 +18,11 @@ class Repair extends Model
         'staff_id',
         'total_parts_cost',
         'service_charge',
-        'grand_total'
+        'grand_total',
+        'status' // <--- Ensure this is here
     ];
 
+    // THIS IS THE CRITICAL PART
     public function items()
     {
         return $this->hasMany(RepairItem::class);

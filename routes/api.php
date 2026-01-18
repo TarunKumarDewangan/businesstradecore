@@ -2,12 +2,14 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+
+// Controllers
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ShopController;
-use App\Http\Controllers\Api\CategoryController; // <--- Added semicolon here
+use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ItemController;
 use App\Http\Controllers\Api\LocationController;
-use app\Http\Controllers\Api\ShopUserController;
+use App\Http\Controllers\Api\ShopUserController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\StaffOpController;
@@ -16,7 +18,8 @@ use App\Http\Controllers\Api\DeliveryPartnerController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\ReturnController;
 use App\Http\Controllers\Api\SettingsController;
-
+use App\Http\Controllers\Api\StockHistoryController;
+use App\Http\Controllers\Api\RepairController;
 
 /*
 |--------------------------------------------------------------------------
@@ -24,128 +27,116 @@ use App\Http\Controllers\Api\SettingsController;
 |--------------------------------------------------------------------------
 */
 
-// Public Routes (No Login Required)
+// ========================
+// 🔓 PUBLIC ROUTES
+// ========================
 Route::post('/login', [AuthController::class, 'login']);
 
-// Protected Routes (Login Required)
+
+// ========================
+// 🔐 PROTECTED ROUTES
+// ========================
 Route::middleware('auth:sanctum')->group(function () {
 
-    // Logout
+    // Auth & User
     Route::post('/logout', [AuthController::class, 'logout']);
-
-    // Get User Details
     Route::get('/user', function (Request $request) {
-        return $request->user();
-    });
+        return $request->user(); });
 
-    // Shop Management Routes
+    // 1️⃣ SHOP & SETTINGS
     Route::get('/shops', [ShopController::class, 'index']);
     Route::post('/shops', [ShopController::class, 'store']);
-    Route::put('/shops/{id}', [App\Http\Controllers\Api\ShopController::class, 'update']); // Update
-    Route::delete('/shops/{id}', [App\Http\Controllers\Api\ShopController::class, 'destroy']); // Delete
+    Route::put('/shops/{id}', [ShopController::class, 'update']);
+    Route::delete('/shops/{id}', [ShopController::class, 'destroy']);
     Route::post('/shops/{id}/toggle', [ShopController::class, 'toggleStatus']);
 
-    // Category Routes
-    Route::get('/categories', [App\Http\Controllers\Api\CategoryController::class, 'index']);
-    Route::post('/categories', [App\Http\Controllers\Api\CategoryController::class, 'store']);
-    Route::put('/categories/{id}', [App\Http\Controllers\Api\CategoryController::class, 'update']); // <--- NEW
-    Route::delete('/categories/{id}', [App\Http\Controllers\Api\CategoryController::class, 'destroy']);
-    Route::post('/categories/move-delete', [App\Http\Controllers\Api\CategoryController::class, 'moveAndDelete']);
+    Route::get('/settings/shop', [SettingsController::class, 'getShopDetails']);
+    Route::post('/settings/shop', [SettingsController::class, 'updateShop']);
+    Route::post('/settings/password', [SettingsController::class, 'changePassword']);
 
-    // Location Routes
-    Route::get('/locations', [App\Http\Controllers\Api\LocationController::class, 'index']);
-    Route::post('/locations', [App\Http\Controllers\Api\LocationController::class, 'store']);
-    Route::delete('/locations/{id}', [App\Http\Controllers\Api\LocationController::class, 'destroy']);
+    // 2️⃣ INVENTORY (Categories, Locations, Items, Stock)
+    Route::get('/categories', [CategoryController::class, 'index']);
+    Route::post('/categories', [CategoryController::class, 'store']);
+    Route::put('/categories/{id}', [CategoryController::class, 'update']);
+    Route::delete('/categories/{id}', [CategoryController::class, 'destroy']);
+    Route::post('/categories/move-delete', [CategoryController::class, 'moveAndDelete']);
 
-    // Item Routes
-    Route::get('/items', [App\Http\Controllers\Api\ItemController::class, 'index']);
-    Route::post('/items', [App\Http\Controllers\Api\ItemController::class, 'store']);
-    Route::put('/items/{id}', [App\Http\Controllers\Api\ItemController::class, 'update']); // PUT for updates
-    Route::delete('/items/{id}', [App\Http\Controllers\Api\ItemController::class, 'destroy']);
+    Route::get('/locations', [LocationController::class, 'index']);
+    Route::post('/locations', [LocationController::class, 'store']);
+    Route::delete('/locations/{id}', [LocationController::class, 'destroy']);
 
-    // Staff & Retailer Management
-    Route::get('/shop-users', [App\Http\Controllers\Api\ShopUserController::class, 'index']);
-    Route::post('/shop-users', [App\Http\Controllers\Api\ShopUserController::class, 'store']);
-    Route::delete('/shop-users/{id}', [App\Http\Controllers\Api\ShopUserController::class, 'destroy']);
-    Route::put('/shop-users/{id}', [App\Http\Controllers\Api\ShopUserController::class, 'update']);
+    Route::get('/items', [ItemController::class, 'index']);
+    Route::post('/items', [ItemController::class, 'store']);
+    Route::put('/items/{id}', [ItemController::class, 'update']);
+    Route::delete('/items/{id}', [ItemController::class, 'destroy']);
 
-    // Billing Routes
-    Route::get('/invoices', [App\Http\Controllers\Api\InvoiceController::class, 'index']);
-    Route::post('/invoices', [App\Http\Controllers\Api\InvoiceController::class, 'store']);
-    Route::delete('/invoices/{id}', [App\Http\Controllers\Api\InvoiceController::class, 'destroy']);
+    Route::get('/stock-history', [StockHistoryController::class, 'index']);
 
+    // 3️⃣ USER MANAGEMENT (Staff, Retailers, Partners)
+    Route::get('/shop-users', [ShopUserController::class, 'index']);
+    Route::post('/shop-users', [ShopUserController::class, 'store']);
+    Route::put('/shop-users/{id}', [ShopUserController::class, 'update']);
+    Route::delete('/shop-users/{id}', [ShopUserController::class, 'destroy']);
 
-    // Ledger Routes
-    Route::get('/ledger', [App\Http\Controllers\Api\TransactionController::class, 'index']);
-    Route::post('/ledger/payment', [App\Http\Controllers\Api\TransactionController::class, 'store']);
+    Route::get('/partners', [DeliveryPartnerController::class, 'index']);
+    Route::post('/partners', [DeliveryPartnerController::class, 'store']);
+    Route::delete('/partners/{id}', [DeliveryPartnerController::class, 'destroy']);
 
-    // Staff Operations
-    Route::get('/staff/status', [App\Http\Controllers\Api\StaffOpController::class, 'todayStatus']);
-    Route::post('/staff/punch', [App\Http\Controllers\Api\StaffOpController::class, 'punch']);
-    Route::post('/staff/worklog', [App\Http\Controllers\Api\StaffOpController::class, 'storeWorkLog']);
+    // 4️⃣ STAFF OPERATIONS (Attendance & Logs)
+    Route::get('/staff/status', [StaffOpController::class, 'todayStatus']);
+    Route::post('/staff/punch', [StaffOpController::class, 'punch']);
+    Route::post('/staff/worklog', [StaffOpController::class, 'storeWorkLog']);
 
-    // Master Viewing Staff Data
-    Route::get('/staff/attendance-list', [App\Http\Controllers\Api\StaffOpController::class, 'indexAttendance']);
-    Route::get('/staff/worklog-list', [App\Http\Controllers\Api\StaffOpController::class, 'indexWorkLogs']);
+    // Master View & Manual Entry
+    Route::get('/staff/attendance-list', [StaffOpController::class, 'indexAttendance']);
+    Route::get('/staff/worklog-list', [StaffOpController::class, 'indexWorkLogs']);
+    Route::get('/staff-status/{id}', [StaffOpController::class, 'getStaffStatus']);
+    Route::post('/manual/punch', [StaffOpController::class, 'manualPunch']);
+    Route::post('/manual/worklog', [StaffOpController::class, 'manualWorkLog']);
 
-    // Dashboard Stats
-    Route::get('/dashboard/stats', [App\Http\Controllers\Api\DashboardController::class, 'getStats']);
+    // 5️⃣ SALES & BILLING (Invoices & Ledger)
+    Route::get('/invoices', [InvoiceController::class, 'index']);
+    Route::post('/invoices', [InvoiceController::class, 'store']);
+    Route::put('/invoices/{id}', [InvoiceController::class, 'update']); // Edit Invoice
+    Route::delete('/invoices/{id}', [InvoiceController::class, 'destroy']); // Delete Invoice
 
+    Route::get('/ledger', [TransactionController::class, 'index']);
+    Route::post('/ledger/payment', [TransactionController::class, 'store']);
 
-    // ==========================
-    // DELIVERY PARTNERS
-    // ==========================
-    Route::get('/partners', [App\Http\Controllers\Api\DeliveryPartnerController::class, 'index']);
-    Route::post('/partners', [App\Http\Controllers\Api\DeliveryPartnerController::class, 'store']);
-    Route::delete('/partners/{id}', [App\Http\Controllers\Api\DeliveryPartnerController::class, 'destroy']);
+    // 6️⃣ B2B ORDERS & RETURNS
+    // Retailer Side
+    Route::get('/catalog', [OrderController::class, 'getCatalog']);
+    Route::post('/order/place', [OrderController::class, 'placeOrder']);
+    Route::get('/order/my-history', [OrderController::class, 'myOrders']);
+    Route::post('/order/{id}/cancel', [OrderController::class, 'cancelOrder']);
+    Route::post('/order/{id}/update', [OrderController::class, 'updateOrder']);
+    Route::post('/order/{id}/received', [OrderController::class, 'markReceived']);
+    Route::post('/return/request', [ReturnController::class, 'store']);
 
-    // ==========================
-    // B2B ORDER SYSTEM
-    // ==========================
+    // Master Side
+    Route::get('/order/incoming', [OrderController::class, 'incomingOrders']);
+    Route::post('/order/manual', [OrderController::class, 'createOrderManual']);
+    Route::post('/order/{id}/dispatch', [OrderController::class, 'dispatchOrder']);
 
-    // Retailer Actions
-    Route::get('/catalog', [App\Http\Controllers\Api\OrderController::class, 'getCatalog']); // View Items
-    Route::post('/order/place', [App\Http\Controllers\Api\OrderController::class, 'placeOrder']); // Place Order
-    Route::get('/order/my-history', [App\Http\Controllers\Api\OrderController::class, 'myOrders']); // Retailer History
-    Route::post('/order/{id}/dispatch', [App\Http\Controllers\Api\OrderController::class, 'dispatchOrder']);
-    Route::post('/order/{id}/cancel', [App\Http\Controllers\Api\OrderController::class, 'cancelOrder']);
-    Route::post('/order/{id}/update', [App\Http\Controllers\Api\OrderController::class, 'updateOrder']);
-    Route::post('/order/manual', [App\Http\Controllers\Api\OrderController::class, 'createOrderManual']);
+    // Master Actions (Reject, Restore, Deliver, Reset)
+    Route::post('/order/{id}/reject', [OrderController::class, 'rejectOrder']);
+    Route::post('/order/{id}/restore', [OrderController::class, 'restoreOrder']);
+    Route::post('/order/{id}/deliver', [OrderController::class, 'markDelivered']);
+    Route::post('/order/{id}/revert-delivery', [OrderController::class, 'revertDelivery']);
+    Route::post('/order/{id}/cancel-dispatch', [OrderController::class, 'cancelDispatch']);
 
-    // ==========================
-    // RETURNS MANAGEMENT
-    // ==========================
-    Route::post('/return/request', [App\Http\Controllers\Api\ReturnController::class, 'store']); // Retailer
-    Route::get('/returns', [App\Http\Controllers\Api\ReturnController::class, 'index']); // Master List
-    Route::post('/return/{id}/process', [App\Http\Controllers\Api\ReturnController::class, 'approve']); // Master Action
+    // Returns Management (Master)
+    Route::get('/returns', [ReturnController::class, 'index']);
+    Route::post('/return/{id}/process', [ReturnController::class, 'approve']); // Credit Approval
+    Route::post('/return/{id}/inspect', [ReturnController::class, 'inspect']); // Stock Inspection
 
+    // 7️⃣ REPAIRS & SERVICE (Maker-Checker)
+    Route::get('/repairs', [RepairController::class, 'index']);
+    Route::post('/repairs', [RepairController::class, 'store']);
+    Route::post('/repairs/{id}/approve', [RepairController::class, 'approve']);
+    Route::delete('/repairs/{id}', [RepairController::class, 'destroy']);
 
-    // Settings
-    Route::get('/settings/shop', [App\Http\Controllers\Api\SettingsController::class, 'getShopDetails']);
-    Route::post('/settings/shop', [App\Http\Controllers\Api\SettingsController::class, 'updateShop']);
-    Route::post('/settings/password', [App\Http\Controllers\Api\SettingsController::class, 'changePassword']);
-
-    // Master Actions
-    Route::get('/order/incoming', [App\Http\Controllers\Api\OrderController::class, 'incomingOrders']); // View Retailer Orders
-
-    Route::get('/dashboard/counts', [App\Http\Controllers\Api\DashboardController::class, 'getCounts']);
-
-    // Master Manual Entry Routes
-    Route::get('/staff-status/{id}', [App\Http\Controllers\Api\StaffOpController::class, 'getStaffStatus']);
-    Route::post('/manual/punch', [App\Http\Controllers\Api\StaffOpController::class, 'manualPunch']);
-    Route::post('/manual/worklog', [App\Http\Controllers\Api\StaffOpController::class, 'manualWorkLog']);
-
-    // Repair Module
-    Route::post('/repairs', [App\Http\Controllers\Api\RepairController::class, 'store']);
-    Route::get('/repairs', [App\Http\Controllers\Api\RepairController::class, 'index']);
-
-    Route::get('/stock-history', [App\Http\Controllers\Api\StockHistoryController::class, 'index']);
-
-
-    Route::post('/order/{id}/reject', [App\Http\Controllers\Api\OrderController::class, 'rejectOrder']);
-    Route::post('/order/{id}/restore', [App\Http\Controllers\Api\OrderController::class, 'restoreOrder']);
-    Route::post('/order/{id}/deliver', [App\Http\Controllers\Api\OrderController::class, 'markDelivered']);
-
-    Route::post('/order/{id}/revert-delivery', [App\Http\Controllers\Api\OrderController::class, 'revertDelivery']);
-    Route::post('/order/{id}/cancel-dispatch', [App\Http\Controllers\Api\OrderController::class, 'cancelDispatch']);
+    // 8️⃣ DASHBOARD & STATS
+    Route::get('/dashboard/stats', [DashboardController::class, 'getStats']);
+    Route::get('/dashboard/counts', [DashboardController::class, 'getCounts']);
 });

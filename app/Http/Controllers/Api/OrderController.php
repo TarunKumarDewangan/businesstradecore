@@ -20,16 +20,24 @@ class OrderController extends Controller
 {
     // ================= RETAILER ACTIONS =================
 
-    // 1. Get Catalog
+    // 1. Get Catalog (Retailer View)
     public function getCatalog(Request $request)
     {
         $user = Auth::user();
-        $items = Item::where('shop_id', $user->shop_id)
+
+        $query = Item::where('shop_id', $user->shop_id)
             ->select('id', 'item_name', 'part_number', 'category_id', 'selling_price', 'stock_quantity', 'compatible_models')
-            ->where('stock_quantity', '>', 0)
-            ->with('category:id,name')
-            ->orderBy('item_name')
-            ->paginate(20);
+            // Removed: ->where('stock_quantity', '>', 0)
+            ->with('category:id,name');
+
+        // Optional: Add Search on Backend too
+        if ($request->has('search') && !empty($request->search)) {
+            $search = $request->search;
+            $query->where('item_name', 'LIKE', "%{$search}%")
+                ->orWhere('part_number', 'LIKE', "%{$search}%");
+        }
+
+        $items = $query->orderBy('item_name')->paginate(20);
 
         return response()->json(['status' => true, 'data' => $items]);
     }
@@ -77,13 +85,16 @@ class OrderController extends Controller
     }
 
     // 3. View My Orders
+    // 3. Retailer: View My Orders
     public function myOrders()
     {
         $user = Auth::user();
         $orders = Order::where('retailer_id', $user->id)
-            ->with('items.item')
+            // ADDED 'returnRequests' HERE
+            ->with(['items.item', 'returnRequests'])
             ->orderBy('id', 'desc')
             ->paginate(10);
+
         return response()->json(['status' => true, 'data' => $orders]);
     }
 
@@ -106,6 +117,7 @@ class OrderController extends Controller
     }
 
     // 5. Dispatch Order (Logs Stock)
+    // 5. Dispatch Order (Updated Logic: Handle 0 Qty)
     public function dispatchOrder(Request $request, $id)
     {
         $request->validate([
@@ -121,33 +133,38 @@ class OrderController extends Controller
 
             $order = Order::where('id', $id)->where('shop_id', $user->shop_id)->firstOrFail();
 
-            if ($order->status !== 'pending') {
+            if ($order->status !== 'pending')
                 throw new \Exception("Order is already processed");
-            }
 
             $totalAmount = 0;
             $invoiceItemsData = [];
+            $hasShippableItems = false; // Flag to check if ANY item is being sent
 
             foreach ($request->items as $itemData) {
                 $orderItem = OrderItem::where('order_id', $order->id)->where('item_id', $itemData['item_id'])->first();
 
                 if ($orderItem) {
-                    $qty = $itemData['fulfilled_qty'];
+                    $qty = (int) $itemData['fulfilled_qty'];
                     $orderItem->fulfilled_qty = $qty;
                     $orderItem->save();
 
+                    // === CORE LOGIC CHANGE: Only process if QTY > 0 ===
                     if ($qty > 0) {
+                        $hasShippableItems = true;
+
                         $dbItem = Item::find($orderItem->item_id);
                         if ($dbItem->stock_quantity < $qty) {
                             throw new \Exception("Insufficient stock for " . $dbItem->item_name);
                         }
 
-                        // USE SERVICE (Deduct Stock)
+                        // Deduct Stock
                         StockService::update($dbItem->id, -$qty, "Order Dispatched #" . $order->order_number);
 
+                        // Calc Cost
                         $lineTotal = $orderItem->unit_price * $qty;
                         $totalAmount += $lineTotal;
 
+                        // Prep Invoice Item
                         $invoiceItemsData[] = [
                             'item_id' => $dbItem->id,
                             'item_name' => $dbItem->item_name,
@@ -157,6 +174,14 @@ class OrderController extends Controller
                         ];
                     }
                 }
+            }
+
+            // If Master sets all items to 0, maybe Cancel the order or Reject it instead?
+            // But let's proceed. It creates an Empty Invoice (Value 0).
+            // Actually, best to BLOCK dispatch if total 0.
+
+            if (!$hasShippableItems) {
+                throw new \Exception("Cannot Dispatch empty order! Please Reject instead.");
             }
 
             // Generate Invoice
@@ -189,7 +214,7 @@ class OrderController extends Controller
                     'user_id' => $order->retailer_id,
                     'type' => 'debit',
                     'amount' => $totalAmount,
-                    'description' => 'Order ' . $order->order_number . ' (Dispatched)',
+                    'description' => 'Order ' . $order->order_number,
                     'reference_id' => $invoice->id,
                     'balance_after' => $retailerDetail->current_balance,
                     'date' => now()
@@ -428,5 +453,20 @@ class OrderController extends Controller
             DB::rollback();
             return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
         }
+    }
+    // 6. Retailer: Mark Order as Received
+    public function markReceived($id)
+    {
+        $user = Auth::user();
+        $order = Order::where('id', $id)->where('retailer_id', $user->id)->firstOrFail();
+
+        if ($order->status !== 'dispatched') {
+            return response()->json(['status' => false, 'message' => 'Order must be Dispatched first'], 400);
+        }
+
+        $order->status = 'delivered';
+        $order->save();
+
+        return response()->json(['status' => true, 'message' => 'Order Marked as Received!']);
     }
 }

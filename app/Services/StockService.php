@@ -8,10 +8,6 @@ use Illuminate\Support\Facades\Auth;
 
 class StockService
 {
-    /**
-     * Update Stock & Log History
-     * NOTE the "static" keyword here.
-     */
     public static function update($itemId, $quantity, $reason)
     {
         $item = Item::find($itemId);
@@ -20,7 +16,7 @@ class StockService
 
         $user = Auth::user();
 
-        // 1. Update Actual Stock
+        // 1. Update Stock
         $item->stock_quantity += $quantity;
         $item->save();
 
