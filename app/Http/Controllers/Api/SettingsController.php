@@ -27,7 +27,7 @@ class SettingsController extends Controller
             'shop_name' => 'required',
             'latitude' => 'nullable',
             'longitude' => 'nullable',
-            'allowed_radius' => 'nullable|integer|min:10', // Validate Radius
+            'allowed_radius' => 'nullable|integer|min:10',
             'logo' => 'nullable|image|max:2048'
         ]);
 
@@ -36,12 +36,13 @@ class SettingsController extends Controller
 
         $shop->shop_name = $request->shop_name;
         $shop->gst_number = $request->gst_number;
+
+        // Save Geolocation
         $shop->latitude = $request->latitude;
         $shop->longitude = $request->longitude;
+        $shop->allowed_radius = $request->allowed_radius ?? 100; // Default 100 meters
 
-        // Use provided radius OR default to 100 if empty
-        $shop->allowed_radius = $request->allowed_radius ?? 100;
-
+        // Handle Logo Upload
         if ($request->hasFile('logo')) {
             if ($shop->shop_logo) {
                 Storage::delete($shop->shop_logo);
@@ -54,45 +55,8 @@ class SettingsController extends Controller
 
         return response()->json([
             'status' => true,
-            'message' => 'Settings Updated',
-            'logo_url' => asset('storage/' . $shop->shop_logo)
-        ]);
-    }
-    public function updateShop(Request $request)
-    {
-        $request->validate([
-            'shop_name' => 'required',
-            'latitude' => 'nullable',
-            'longitude' => 'nullable',
-            'allowed_radius' => 'nullable|integer|min:10', // Validate Radius
-            'logo' => 'nullable|image|max:2048'
-        ]);
-
-        $user = Auth::user();
-        $shop = Shop::find($user->shop_id);
-
-        $shop->shop_name = $request->shop_name;
-        $shop->gst_number = $request->gst_number;
-        $shop->latitude = $request->latitude;
-        $shop->longitude = $request->longitude;
-
-        // Use provided radius OR default to 100 if empty
-        $shop->allowed_radius = $request->allowed_radius ?? 100;
-
-        if ($request->hasFile('logo')) {
-            if ($shop->shop_logo) {
-                Storage::delete($shop->shop_logo);
-            }
-            $path = $request->file('logo')->store('logos', 'public');
-            $shop->shop_logo = $path;
-        }
-
-        $shop->save();
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Settings Updated',
-            'logo_url' => asset('storage/' . $shop->shop_logo)
+            'message' => 'Shop Settings Updated',
+            'logo_url' => $shop->shop_logo ? asset('storage/'.$shop->shop_logo) : null
         ]);
     }
 

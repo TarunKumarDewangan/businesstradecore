@@ -134,4 +134,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/staff-status/{id}', [App\Http\Controllers\Api\StaffOpController::class, 'getStaffStatus']);
     Route::post('/manual/punch', [App\Http\Controllers\Api\StaffOpController::class, 'manualPunch']);
     Route::post('/manual/worklog', [App\Http\Controllers\Api\StaffOpController::class, 'manualWorkLog']);
+
+    // Repair Module
+    Route::post('/repairs', [App\Http\Controllers\Api\RepairController::class, 'store']);
+    Route::get('/repairs', [App\Http\Controllers\Api\RepairController::class, 'index']);
+
+    Route::get('/stock-history', [App\Http\Controllers\Api\StockHistoryController::class, 'index']);
+
+
+    Route::post('/order/{id}/reject', [App\Http\Controllers\Api\OrderController::class, 'rejectOrder']);
+    Route::post('/order/{id}/restore', [App\Http\Controllers\Api\OrderController::class, 'restoreOrder']);
+    Route::post('/order/{id}/deliver', [App\Http\Controllers\Api\OrderController::class, 'markDelivered']);
+
+    Route::post('/order/{id}/revert-delivery', [App\Http\Controllers\Api\OrderController::class, 'revertDelivery']);
+    Route::post('/order/{id}/cancel-dispatch', [App\Http\Controllers\Api\OrderController::class, 'cancelDispatch']);
 });

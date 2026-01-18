@@ -26,28 +26,25 @@ import IncomingOrders from './components/IncomingOrders';
 import PartnerManager from './components/PartnerManager';
 import ReturnManager from './components/ReturnManager';
 import SettingsManager from './components/SettingsManager';
+import RepairManager from './components/RepairManager'; // <--- NEW
 
 // Staff Components
 import StaffDashboard from './pages/StaffDashboard';
 
 // Retailer Components
 import RetailerCatalog from './pages/RetailerCatalog';
+import StockHistory from './components/StockHistory';
 import RetailerOrders from './pages/RetailerOrders';
 
 function App() {
   return (
     <BrowserRouter>
-      {/* CHANGED POSITION TO BOTTOM-RIGHT */}
       <ToastContainer position="bottom-right" autoClose={3000} theme="colored" />
 
       <Routes>
-        {/* Login Page */}
         <Route path="/" element={<Login />} />
-
-        {/* Super Admin Route */}
         <Route path="/admin" element={<SuperAdminDashboard />} />
 
-        {/* Master Routes (Sidebar Layout) */}
         <Route path="/master" element={<MasterLayout />}>
             <Route index element={<Navigate to="home" />} />
 
@@ -65,20 +62,19 @@ function App() {
             <Route path="partners" element={<PartnerManager />} />
             <Route path="returns" element={<ReturnManager />} />
             <Route path="settings" element={<SettingsManager />} />
+            <Route path="repairs" element={<RepairManager />} /> {/* <--- NEW ROUTE */}
+            <Route path="stock-history" element={<StockHistory />} />
         </Route>
 
-        {/* Staff Routes */}
         <Route path="/staff" element={<StaffLayout />}>
             <Route index element={<StaffDashboard />} />
         </Route>
 
-        {/* Retailer Routes */}
         <Route path="/retailer" element={<RetailerLayout />}>
             <Route index element={<Navigate to="catalog" />} />
             <Route path="catalog" element={<RetailerCatalog />} />
             <Route path="orders" element={<RetailerOrders />} />
         </Route>
-
       </Routes>
     </BrowserRouter>
   );

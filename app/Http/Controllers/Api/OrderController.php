@@ -14,22 +14,19 @@ use App\Models\InvoiceItem;
 use App\Models\RetailerDetail;
 use App\Models\Transaction;
 use App\Models\DeliveryPartner;
+use App\Services\StockService; // Import Service
 
 class OrderController extends Controller
 {
     // ================= RETAILER ACTIONS =================
 
-    // 1. Get Catalog (Items available for B2B)
+    // 1. Get Catalog
     public function getCatalog(Request $request)
     {
-        // We need to find the Shop ID.
-        // Since Retailer is logged in, their 'shop_id' links to the Master's shop.
         $user = Auth::user();
-
         $items = Item::where('shop_id', $user->shop_id)
             ->select('id', 'item_name', 'part_number', 'category_id', 'selling_price', 'stock_quantity', 'compatible_models')
-            // IMPORTANT: We do NOT select 'purchase_price' to keep it secret.
-            ->where('stock_quantity', '>', 0) // Only show in-stock items? Optional.
+            ->where('stock_quantity', '>', 0)
             ->with('category:id,name')
             ->orderBy('item_name')
             ->paginate(20);
@@ -51,10 +48,8 @@ class OrderController extends Controller
         try {
             DB::beginTransaction();
 
-            // Generate Order Number
             $ordNum = 'ORD-' . strtoupper(substr(uniqid(), -6));
 
-            // Create Order Header
             $order = Order::create([
                 'shop_id' => $user->shop_id,
                 'retailer_id' => $user->id,
@@ -62,15 +57,13 @@ class OrderController extends Controller
                 'status' => 'pending'
             ]);
 
-            // Add Items
             foreach ($request->items as $cartItem) {
                 $dbItem = Item::find($cartItem['id']);
-
                 OrderItem::create([
                     'order_id' => $order->id,
                     'item_id' => $dbItem->id,
                     'requested_qty' => $cartItem['quantity'],
-                    'unit_price' => $dbItem->selling_price // Snapshot of price at that moment
+                    'unit_price' => $dbItem->selling_price
                 ]);
             }
 
@@ -83,35 +76,40 @@ class OrderController extends Controller
         }
     }
 
-    // 3. Retailer: View My Orders
+    // 3. View My Orders
     public function myOrders()
     {
         $user = Auth::user();
         $orders = Order::where('retailer_id', $user->id)
-            ->with('items.item') // Load items inside order
+            ->with('items.item')
             ->orderBy('id', 'desc')
             ->paginate(10);
-
         return response()->json(['status' => true, 'data' => $orders]);
     }
 
     // ================= MASTER ACTIONS =================
 
-    // 4. Master: View All Incoming Orders
-    public function incomingOrders()
+    // 4. View Incoming Orders (With Filter)
+    public function incomingOrders(Request $request)
     {
         $user = Auth::user();
-        $orders = Order::where('shop_id', $user->shop_id)
-            ->with(['retailer:id,name,phone', 'items.item'])
-            ->orderBy('id', 'desc')
-            ->paginate(20);
+        $query = Order::where('shop_id', $user->shop_id)
+            ->with(['retailer:id,name,phone', 'items.item']);
 
+        // FILTER LOGIC
+        if ($request->has('status') && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        }
+
+        $orders = $query->orderBy('id', 'desc')->paginate(20);
         return response()->json(['status' => true, 'data' => $orders]);
     }
+
+    // 5. Dispatch Order (Logs Stock)
     public function dispatchOrder(Request $request, $id)
     {
         $request->validate([
-            'items' => 'required|array', // List of { item_id, fulfilled_qty }
+            'items' => 'required|array',
             'delivery_type' => 'required',
             'driver_id' => 'required'
         ]);
@@ -127,32 +125,26 @@ class OrderController extends Controller
                 throw new \Exception("Order is already processed");
             }
 
-            // 1. Calculate Totals & Deduct Stock
             $totalAmount = 0;
             $invoiceItemsData = [];
 
             foreach ($request->items as $itemData) {
-                $orderItem = OrderItem::where('order_id', $order->id)
-                    ->where('item_id', $itemData['item_id'])
-                    ->first();
+                $orderItem = OrderItem::where('order_id', $order->id)->where('item_id', $itemData['item_id'])->first();
 
                 if ($orderItem) {
                     $qty = $itemData['fulfilled_qty'];
-
-                    // Update Order Item
                     $orderItem->fulfilled_qty = $qty;
                     $orderItem->save();
 
                     if ($qty > 0) {
-                        // Deduct Stock
                         $dbItem = Item::find($orderItem->item_id);
                         if ($dbItem->stock_quantity < $qty) {
                             throw new \Exception("Insufficient stock for " . $dbItem->item_name);
                         }
-                        $dbItem->stock_quantity -= $qty;
-                        $dbItem->save();
 
-                        // Prepare Invoice Data
+                        // USE SERVICE (Deduct Stock)
+                        StockService::update($dbItem->id, -$qty, "Order Dispatched #" . $order->order_number);
+
                         $lineTotal = $orderItem->unit_price * $qty;
                         $totalAmount += $lineTotal;
 
@@ -167,7 +159,7 @@ class OrderController extends Controller
                 }
             }
 
-            // 2. Generate Invoice
+            // Generate Invoice
             $invNum = 'INV-' . strtoupper(substr(uniqid(), -8));
             $invoice = Invoice::create([
                 'shop_id' => $user->shop_id,
@@ -178,38 +170,35 @@ class OrderController extends Controller
                 'total_amount' => $totalAmount,
                 'discount' => 0,
                 'grand_total' => $totalAmount,
-                'paid_amount' => 0, // B2B is usually full credit initially
+                'paid_amount' => 0,
                 'payment_mode' => 'credit'
             ]);
 
-            // Save Invoice Items
             foreach ($invoiceItemsData as $data) {
                 $data['invoice_id'] = $invoice->id;
                 InvoiceItem::create($data);
             }
 
-            // 3. Update Ledger (Debit the Retailer)
+            // Ledger Update
             $retailerDetail = RetailerDetail::where('user_id', $order->retailer_id)->first();
             if ($retailerDetail) {
                 $retailerDetail->current_balance += $totalAmount;
                 $retailerDetail->save();
-
                 Transaction::create([
                     'shop_id' => $user->shop_id,
                     'user_id' => $order->retailer_id,
                     'type' => 'debit',
                     'amount' => $totalAmount,
-                    'description' => 'Order ' . $order->order_number . ' (Invoice generated)',
+                    'description' => 'Order ' . $order->order_number . ' (Dispatched)',
                     'reference_id' => $invoice->id,
                     'balance_after' => $retailerDetail->current_balance,
                     'date' => now()
                 ]);
             }
 
-            // 4. Update Order Status
+            // Update Status
             $driverName = 'Unknown';
             $vehicleDetails = null;
-
             if ($request->delivery_type === 'partner') {
                 $p = DeliveryPartner::find($request->driver_id);
                 if ($p) {
@@ -217,11 +206,10 @@ class OrderController extends Controller
                     $vehicleDetails = $p->vehicle_number;
                 }
             } elseif ($request->delivery_type === 'staff') {
-                // If Staff, find in Users table
                 $u = \App\Models\User::find($request->driver_id);
                 if ($u) {
                     $driverName = $u->name . ' (Staff)';
-                    $vehicleDetails = 'Shop Vehicle'; // Or leave null
+                    $vehicleDetails = 'Shop Vehicle';
                 }
             }
 
@@ -242,98 +230,199 @@ class OrderController extends Controller
             return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
         }
     }
+
+    // ... (Cancel & Update Order functions remain same as they don't affect stock yet) ...
     public function cancelOrder($id)
     {
         $user = Auth::user();
         $order = Order::where('id', $id)->where('retailer_id', $user->id)->firstOrFail();
-
-        if ($order->status !== 'pending') {
-            return response()->json(['status' => false, 'message' => 'Cannot cancel processed order'], 400);
-        }
-
-        $order->delete(); // Cascades to items
-        return response()->json(['status' => true, 'message' => 'Order Cancelled Successfully']);
+        if ($order->status !== 'pending')
+            return response()->json(['status' => false, 'message' => 'Cannot cancel'], 400);
+        $order->delete();
+        return response()->json(['status' => true, 'message' => 'Order Cancelled']);
     }
 
     public function updateOrder(Request $request, $id)
     {
-        $request->validate([
-            'items' => 'required|array', // List of { item_id, quantity }
-        ]);
-
+        $request->validate(['items' => 'required|array']);
         $user = Auth::user();
         $order = Order::where('id', $id)->where('retailer_id', $user->id)->firstOrFail();
-
-        if ($order->status !== 'pending') {
-            return response()->json(['status' => false, 'message' => 'Cannot modify processed order'], 400);
-        }
-
+        if ($order->status !== 'pending')
+            return response()->json(['status' => false, 'message' => 'Cannot modify'], 400);
         try {
             DB::beginTransaction();
-
             foreach ($request->items as $itemData) {
-                // If Qty is 0, Delete Item. Else Update.
-                if ($itemData['quantity'] <= 0) {
+                if ($itemData['quantity'] <= 0)
                     OrderItem::where('order_id', $order->id)->where('item_id', $itemData['item_id'])->delete();
-                } else {
-                    OrderItem::where('order_id', $order->id)
-                        ->where('item_id', $itemData['item_id'])
-                        ->update(['requested_qty' => $itemData['quantity']]);
-                }
+                else
+                    OrderItem::where('order_id', $order->id)->where('item_id', $itemData['item_id'])->update(['requested_qty' => $itemData['quantity']]);
             }
-
-            // If order becomes empty, delete it
             if ($order->items()->count() == 0) {
                 $order->delete();
                 DB::commit();
                 return response()->json(['status' => true, 'message' => 'Order empty, deleted.']);
             }
-
             DB::commit();
-            return response()->json(['status' => true, 'message' => 'Order Updated Successfully']);
-
+            return response()->json(['status' => true, 'message' => 'Order Updated']);
         } catch (\Exception $e) {
             DB::rollback();
             return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
         }
     }
-    // 6. Master: Manual Order Creation (On behalf of Retailer)
+
+    // 6. Manual Order
     public function createOrderManual(Request $request)
     {
+        // ... (Same as before, no stock change here) ...
+        // I will include this for completeness if you copy-paste the whole file
         $request->validate([
             'retailer_id' => 'required|exists:users,id',
             'items' => 'required|array|min:1',
             'items.*.id' => 'required|exists:items,id',
             'items.*.quantity' => 'required|integer|min:1'
         ]);
+        $user = Auth::user();
+        try {
+            DB::beginTransaction();
+            $ordNum = 'ORD-' . strtoupper(substr(uniqid(), -6));
+            $order = Order::create(['shop_id' => $user->shop_id, 'retailer_id' => $request->retailer_id, 'order_number' => $ordNum, 'status' => 'pending']);
+            foreach ($request->items as $cartItem) {
+                $dbItem = Item::find($cartItem['id']);
+                OrderItem::create(['order_id' => $order->id, 'item_id' => $dbItem->id, 'requested_qty' => $cartItem['quantity'], 'unit_price' => $dbItem->selling_price]);
+            }
+            DB::commit();
+            return response()->json(['status' => true, 'message' => 'Manual Order Created!', 'order_number' => $ordNum]);
+        } catch (\Exception $e) {
+            DB::rollback();
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
 
-        $user = Auth::user(); // The Master
+    public function rejectOrder($id)
+    {
+        $user = Auth::user();
+        $order = Order::where('id', $id)->where('shop_id', $user->shop_id)->firstOrFail();
+
+        if ($order->status !== 'pending')
+            return response()->json(['status' => false, 'message' => 'Only pending orders can be rejected'], 400);
+
+        $order->status = 'cancelled'; // We use 'cancelled' as rejected status
+        $order->save();
+
+        return response()->json(['status' => true, 'message' => 'Order Rejected']);
+    }
+
+    // 8. Master: Restore Order (Rejected -> Pending)
+    public function restoreOrder($id)
+    {
+        $user = Auth::user();
+        $order = Order::where('id', $id)->where('shop_id', $user->shop_id)->firstOrFail();
+
+        if ($order->status !== 'cancelled')
+            return response()->json(['status' => false, 'message' => 'Only rejected orders can be restored'], 400);
+
+        $order->status = 'pending';
+        $order->save();
+
+        return response()->json(['status' => true, 'message' => 'Order Restored to Pending']);
+    }
+
+    // 9. Master: Mark Delivered
+    public function markDelivered($id)
+    {
+        $user = Auth::user();
+        $order = Order::where('id', $id)->where('shop_id', $user->shop_id)->firstOrFail();
+
+        if ($order->status !== 'dispatched')
+            return response()->json(['status' => false, 'message' => 'Only dispatched orders can be delivered'], 400);
+
+        $order->status = 'delivered';
+        $order->save();
+
+        return response()->json(['status' => true, 'message' => 'Order Marked as Delivered!']);
+    }
+    // 10. Master: Revert Delivery (Delivered -> Dispatched)
+    public function revertDelivery($id)
+    {
+        $user = Auth::user();
+        $order = Order::where('id', $id)->where('shop_id', $user->shop_id)->firstOrFail();
+
+        if ($order->status !== 'delivered') {
+            return response()->json(['status' => false, 'message' => 'Order is not marked as delivered'], 400);
+        }
+
+        $order->status = 'dispatched';
+        $order->save();
+
+        return response()->json(['status' => true, 'message' => 'Order Reverted to Dispatched']);
+    }
+
+    // 11. Master: Cancel Dispatch (Dispatched -> Pending + Full Rollback)
+    public function cancelDispatch($id)
+    {
+        $user = Auth::user();
+        $order = Order::where('id', $id)->where('shop_id', $user->shop_id)->firstOrFail();
+
+        if ($order->status !== 'dispatched') {
+            return response()->json(['status' => false, 'message' => 'Order must be in Dispatched state to reset'], 400);
+        }
+
+        if (!$order->invoice_id) {
+            // Safety fallback if no invoice linked
+            $order->status = 'pending';
+            $order->save();
+            return response()->json(['status' => true, 'message' => 'Order Reset to Pending (No Invoice found)']);
+        }
 
         try {
             DB::beginTransaction();
 
-            $ordNum = 'ORD-' . strtoupper(substr(uniqid(), -6));
+            $invoice = Invoice::find($order->invoice_id);
 
-            $order = Order::create([
-                'shop_id' => $user->shop_id,
-                'retailer_id' => $request->retailer_id, // Selected Retailer
-                'order_number' => $ordNum,
-                'status' => 'pending'
-            ]);
+            // A. Rollback Stock & Log History
+            if ($invoice) {
+                foreach ($invoice->items as $item) {
+                    // Add back stock
+                    \App\Services\StockService::update($item->item_id, $item->quantity, "Order Reset #" . $order->order_number);
+                }
 
-            foreach ($request->items as $cartItem) {
-                $dbItem = Item::find($cartItem['id']);
+                // B. Reverse Ledger
+                if ($invoice->customer_id) {
+                    $retailer = RetailerDetail::where('user_id', $invoice->customer_id)->first();
+                    if ($retailer) {
+                        // We remove the grand total from their debt
+                        $retailer->current_balance -= $invoice->grand_total;
+                        $retailer->save();
 
-                OrderItem::create([
-                    'order_id' => $order->id,
-                    'item_id' => $dbItem->id,
-                    'requested_qty' => $cartItem['quantity'],
-                    'unit_price' => $dbItem->selling_price
-                ]);
+                        // Log Credit Note
+                        Transaction::create([
+                            'shop_id' => $user->shop_id,
+                            'user_id' => $invoice->customer_id,
+                            'type' => 'credit',
+                            'amount' => $invoice->grand_total,
+                            'description' => 'Order Reset (System Auto)',
+                            'reference_id' => $invoice->id,
+                            'balance_after' => $retailer->current_balance,
+                            'date' => now()
+                        ]);
+                    }
+                }
+
+                // Delete Invoice
+                $invoice->delete();
             }
 
+            // C. Reset Order
+            $order->update([
+                'status' => 'pending',
+                'invoice_id' => null,
+                'delivery_type' => null,
+                'driver_id' => null,
+                'driver_name' => null
+            ]);
+
             DB::commit();
-            return response()->json(['status' => true, 'message' => 'Manual Order Created!', 'order_number' => $ordNum]);
+            return response()->json(['status' => true, 'message' => 'Dispatch Cancelled. Stock Restored. Order is Pending.']);
 
         } catch (\Exception $e) {
             DB::rollback();

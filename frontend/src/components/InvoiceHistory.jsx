@@ -3,8 +3,10 @@ import api from '../api/axios';
 import { Modal, Button, Badge } from 'react-bootstrap';
 import Loader from './Loader';
 import { toast } from 'react-toastify';
+import { useNavigate } from 'react-router-dom'; // Import Navigate Hook
 
 const InvoiceHistory = () => {
+    const navigate = useNavigate(); // Hook for redirection
     const [invoices, setInvoices] = useState([]);
     const [shop, setShop] = useState({});
     const [loading, setLoading] = useState(true);
@@ -24,7 +26,11 @@ const InvoiceHistory = () => {
                 api.get('/settings/shop', { headers })
             ]);
 
-            if (invRes.data.status) setInvoices(invRes.data.data.data);
+            // Handle Pagination Structure Safely
+            if (invRes.data.status) {
+                const invoicesList = invRes.data.data.data || invRes.data.data;
+                setInvoices(invoicesList);
+            }
             if (shopRes.data.status) setShop(shopRes.data.data);
 
         } catch (error) {
@@ -36,6 +42,7 @@ const InvoiceHistory = () => {
 
     useEffect(() => { loadData(); }, []);
 
+    // Search Debounce
     useEffect(() => {
         const timer = setTimeout(() => { loadData(searchTerm); }, 500);
         return () => clearTimeout(timer);
@@ -54,6 +61,12 @@ const InvoiceHistory = () => {
         } catch(e) {
             toast.error('Failed to cancel invoice');
         }
+    };
+
+    // Handle Edit (Redirect to Billing)
+    const handleEdit = (invoice) => {
+        if(!window.confirm('Modify this bill? Current items will be loaded to POS.')) return;
+        navigate('/master/billing', { state: { invoiceToEdit: invoice } });
     };
 
     // Print Logic
@@ -107,14 +120,13 @@ const InvoiceHistory = () => {
 
                                 // 2. Determine Type (Strict Logic)
                                 let typeLabel = 'Walk-in';
-                                let typeBadge = 'secondary'; // Grey for Walk-in
+                                let typeBadge = 'secondary'; // Grey
 
                                 if (inv.customer) {
-                                    // Check the flag from DB
                                     const dbType = inv.customer.retailer_detail?.customer_type;
                                     if (dbType === 'b2b') {
                                         typeLabel = 'Retailer';
-                                        typeBadge = 'primary'; // Blue for Retailer
+                                        typeBadge = 'primary'; // Blue
                                     }
                                 }
 
@@ -133,10 +145,13 @@ const InvoiceHistory = () => {
                                         <td><Badge bg="success">{inv.payment_mode.toUpperCase()}</Badge></td>
                                         <td className="text-center">
                                             <div className="btn-group">
-                                                <button className="btn btn-sm btn-outline-primary" onClick={() => handleView(inv)}>
-                                                    🖨 Print
+                                                <button className="btn btn-sm btn-outline-primary" onClick={() => handleView(inv)} title="Print">
+                                                    🖨
                                                 </button>
-                                                <button className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(inv.id)}>
+                                                <button className="btn btn-sm btn-outline-warning" onClick={() => handleEdit(inv)} title="Edit">
+                                                    ✏️
+                                                </button>
+                                                <button className="btn btn-sm btn-outline-danger" onClick={() => handleDelete(inv.id)} title="Delete">
                                                     🗑️
                                                 </button>
                                             </div>
@@ -205,7 +220,7 @@ const InvoiceHistory = () => {
                     )}
                 </Modal.Body>
                 <Modal.Footer>
-                <Button variant="secondary" onClick={() => setShowModal(false)}>Close</Button>
+                    <Button variant="secondary" onClick={() => setShowModal(false)}>Close</Button>
                     <Button variant="success" onClick={handlePrint}>Print Bill</Button>
                 </Modal.Footer>
             </Modal>

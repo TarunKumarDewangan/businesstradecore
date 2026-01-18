@@ -9,11 +9,14 @@ const MasterLayout = () => {
     const location = useLocation();
     const [showMobileMenu, setShowMobileMenu] = useState(false);
     const userName = localStorage.getItem('user_name') || 'Shop Owner';
+
+    // Notification Counts
     const [counts, setCounts] = useState({ orders: 0, returns: 0 });
 
     const handleClose = () => setShowMobileMenu(false);
     const handleShow = () => setShowMobileMenu(true);
 
+    // Fetch Counts on Load & Page Change
     useEffect(() => {
         const fetchCounts = async () => {
             try {
@@ -33,10 +36,12 @@ const MasterLayout = () => {
         toast.info("Logged out");
     };
 
-    // The Menu Content (Reusable)
+    // The Sidebar Content (Reusable)
+    // Using Flexbox to make the middle section scrollable while footer stays fixed
     const SidebarContent = ({ isMobile }) => (
         <div className="d-flex flex-column h-100">
-            {/* Header (Only show in Desktop, Mobile has its own header) */}
+
+            {/* Header (Only show in Desktop) */}
             {!isMobile && (
                 <h4 className="mb-0 text-center text-warning fw-bold py-3 border-bottom border-secondary">
                     SubhAuto
@@ -50,6 +55,7 @@ const MasterLayout = () => {
                         🏠 DASHBOARD
                     </NavLink>
 
+                    {/* Inventory Group */}
                     <small className="text-muted mt-3 ms-2 fw-bold text-uppercase" style={{fontSize: '0.7rem'}}>Inventory</small>
                     <NavLink to="/master/items" onClick={handleClose} className={({ isActive }) => `btn w-100 text-start border-0 ${isActive ? 'btn-primary text-white' : 'btn-outline-light'}`}>
                         📦 ITEMS (STOCK)
@@ -60,7 +66,11 @@ const MasterLayout = () => {
                     <NavLink to="/master/locations" onClick={handleClose} className={({ isActive }) => `btn w-100 text-start border-0 ${isActive ? 'btn-primary text-white' : 'btn-outline-light'}`}>
                         📍 LOCATIONS
                     </NavLink>
+                    <NavLink to="/master/stock-history" onClick={handleClose} className={({ isActive }) => `btn w-100 text-start border-0 ${isActive ? 'btn-primary text-white' : 'btn-outline-light'}`}>
+    📉 STOCK HISTORY
+</NavLink>
 
+                    {/* Operations Group */}
                     <small className="text-muted mt-3 ms-2 fw-bold text-uppercase" style={{fontSize: '0.7rem'}}>Sales & Ops</small>
                     <NavLink to="/master/billing" onClick={handleClose} className={({ isActive }) => `btn w-100 text-start border-0 ${isActive ? 'btn-warning text-dark fw-bold' : 'btn-outline-light'}`}>
                         🧾 BILLING (POS)
@@ -68,6 +78,9 @@ const MasterLayout = () => {
                     <NavLink to="/master/orders" onClick={handleClose} className={({ isActive }) => `btn w-100 text-start border-0 d-flex justify-content-between align-items-center ${isActive ? 'btn-warning text-dark fw-bold' : 'btn-outline-light'}`}>
                         <span>🔔 ONLINE ORDERS</span>
                         {counts.orders > 0 && <Badge bg="danger" pill>{counts.orders}</Badge>}
+                    </NavLink>
+                    <NavLink to="/master/repairs" onClick={handleClose} className={({ isActive }) => `btn w-100 text-start border-0 ${isActive ? 'btn-warning text-dark fw-bold' : 'btn-outline-light'}`}>
+                        🛠️ REPAIRS & SERVICE
                     </NavLink>
                     <NavLink to="/master/history" onClick={handleClose} className={({ isActive }) => `btn w-100 text-start border-0 ${isActive ? 'btn-primary text-white' : 'btn-outline-light'}`}>
                         📜 SALES HISTORY
@@ -80,6 +93,7 @@ const MasterLayout = () => {
                         {counts.returns > 0 && <Badge bg="warning" text="dark" pill>{counts.returns}</Badge>}
                     </NavLink>
 
+                    {/* Management Group */}
                     <small className="text-muted mt-3 ms-2 fw-bold text-uppercase" style={{fontSize: '0.7rem'}}>Management</small>
                     <NavLink to="/master/staff" onClick={handleClose} className={({ isActive }) => `btn w-100 text-start border-0 ${isActive ? 'btn-info text-dark fw-bold' : 'btn-outline-light'}`}>
                         👥 STAFF
@@ -116,6 +130,7 @@ const MasterLayout = () => {
 
             {/* 2. MAIN CONTENT AREA */}
             <div className="d-flex flex-column flex-grow-1 w-100">
+
                 {/* MOBILE HEADER */}
                 <div className="d-md-none bg-dark text-white p-3 d-flex align-items-center justify-content-between shadow-sm sticky-top">
                     <span className="fw-bold h5 mb-0 text-warning">SubhAuto</span>
@@ -135,7 +150,7 @@ const MasterLayout = () => {
                 <Offcanvas.Header closeButton closeVariant="white" className="border-bottom border-secondary">
                     <Offcanvas.Title className="text-warning fw-bold">Menu</Offcanvas.Title>
                 </Offcanvas.Header>
-                {/* 'p-0' and 'overflow-hidden' ensures SidebarContent controls the scroll */}
+                {/* Using p-0 and overflow-hidden ensures the internal SidebarContent handles the scrolling */}
                 <Offcanvas.Body className="p-0 overflow-hidden">
                     <SidebarContent isMobile={true} />
                 </Offcanvas.Body>
