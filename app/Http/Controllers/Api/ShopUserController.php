@@ -61,9 +61,9 @@ class ShopUserController extends Controller
                 StaffProfile::create([
                     'user_id' => $newUser->id,
                     'shop_id' => $user->shop_id,
-                    'designation' => $request->designation,
-                    'salary' => $request->salary,
-                    'address' => $request->address
+                    'designation' => $request->designation ?? null, // Optional
+                    'salary' => $request->salary ?? 0, // Default to 0
+                    'address' => $request->address ?? null // Optional
                 ]);
             } else {
                 // Creating Retailer / Walk-in
@@ -121,9 +121,9 @@ class ShopUserController extends Controller
             StaffProfile::updateOrCreate(
                 ['user_id' => $targetUser->id],
                 [
-                    'designation' => $request->designation,
-                    'salary' => $request->salary,
-                    'address' => $request->address
+                    'designation' => $request->designation ?? null,
+                    'salary' => $request->salary ?? 0,
+                    'address' => $request->address ?? null
                 ]
             );
         } else { // Retailer

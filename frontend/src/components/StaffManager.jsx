@@ -48,7 +48,7 @@ const StaffManager = () => {
         setForm({
             name: staff.name,
             phone: staff.phone,
-            password: '', // Keep empty unless changing
+            password: '',
             designation: staff.staff_profile?.designation || '',
             salary: staff.staff_profile?.salary || '',
             address: staff.staff_profile?.address || ''
@@ -65,18 +65,6 @@ const StaffManager = () => {
             const payload = { ...form, type: 'staff' };
 
             if (isEditMode) {
-                // We need to implement PUT route in ShopUserController or use a workaround.
-                // Assuming standard Laravel Resource Controller or we reuse POST.
-                // Since we don't have a specific update route in previous steps,
-                // let's use the 'delete -> create' method OR assume you added update.
-                // Best Practice: Let's assume you will add PUT /shop-users/{id}
-                // OR use a POST to /shop-users/update/{id}
-
-                // Temporary: Delete Old -> Create New (Safe for simple staff)
-                // WARNING: This resets their ID and attendance history link.
-                // Ideally, we need a proper update route.
-                // I will provide the backend update code below this response.
-
                 await api.put(`/shop-users/${editId}`, payload, { headers: { Authorization: `Bearer ${token}` } });
                 toast.success('Staff Updated Successfully!');
             } else {
@@ -135,11 +123,13 @@ const StaffManager = () => {
                                     <tr key={user.id}>
                                         <td>
                                             <span className="fw-bold">{user.name}</span><br/>
-                                            <small className="text-muted">{user.staff_profile?.address || ''}</small>
+                                            <small className="text-muted">{user.staff_profile?.address || '-'}</small>
                                         </td>
                                         <td>{user.phone}</td>
                                         <td><span className="badge bg-info text-dark">{user.staff_profile?.designation || '-'}</span></td>
-                                        <td className="fw-bold text-success">₹{user.staff_profile?.salary}</td>
+                                        <td className="fw-bold text-success">
+                                            {user.staff_profile?.salary > 0 ? `₹${user.staff_profile?.salary}` : '-'}
+                                        </td>
                                         <td className="text-center">
                                             <div className="btn-group">
                                                 <button className="btn btn-sm btn-outline-primary" onClick={() => openEditModal(user)}>
@@ -166,37 +156,39 @@ const StaffManager = () => {
                 <Modal.Body>
                     <Form onSubmit={handleSubmit} className="row g-3">
                         <div className="col-md-6">
-                            <label className="form-label small fw-bold">FULL NAME</label>
+                            <label className="form-label small fw-bold">FULL NAME <span className="text-danger">*</span></label>
                             <input className="form-control" required
                                 value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} />
                         </div>
                         <div className="col-md-6">
-                            <label className="form-label small fw-bold">MOBILE (LOGIN ID)</label>
+                            <label className="form-label small fw-bold">MOBILE <span className="text-danger">*</span></label>
                             <input className="form-control" required
                                 value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} />
                         </div>
 
                         <div className="col-md-6">
-                            <label className="form-label small fw-bold">PASSWORD</label>
+                            <label className="form-label small fw-bold">PASSWORD {isEditMode ? '' : '*'}</label>
                             <input type="text" className="form-control"
                                 placeholder={isEditMode ? "Leave empty to keep same" : "Required"}
                                 required={!isEditMode}
                                 value={form.password} onChange={e => setForm({...form, password: e.target.value})} />
                         </div>
+
+                        {/* OPTIONAL FIELDS */}
                         <div className="col-md-6">
                             <label className="form-label small fw-bold">DESIGNATION</label>
-                            <input className="form-control" placeholder="e.g. MECHANIC" required
+                            <input className="form-control" placeholder="Optional"
                                 value={form.designation} onChange={e => setForm({...form, designation: e.target.value.toUpperCase()})} />
                         </div>
 
                         <div className="col-md-6">
                             <label className="form-label small fw-bold">MONTHLY SALARY</label>
-                            <input type="number" className="form-control" required
+                            <input type="number" className="form-control" placeholder="Optional"
                                 value={form.salary} onChange={e => setForm({...form, salary: e.target.value})} />
                         </div>
                         <div className="col-md-12">
                             <label className="form-label small fw-bold">ADDRESS</label>
-                            <textarea className="form-control" rows="2"
+                            <textarea className="form-control" rows="2" placeholder="Optional"
                                 value={form.address} onChange={e => setForm({...form, address: e.target.value.toUpperCase()})}></textarea>
                         </div>
 

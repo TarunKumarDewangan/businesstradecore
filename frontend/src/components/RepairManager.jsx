@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import { toast } from 'react-toastify';
 import Loader from './Loader';
-import { Modal, Button, Badge } from 'react-bootstrap';
+import { Modal, Button, Form, Badge } from 'react-bootstrap';
 
 const RepairManager = () => {
     const [view, setView] = useState('new'); // 'new', 'approvals', 'history'
@@ -10,9 +10,9 @@ const RepairManager = () => {
 
     // Data Lists
     const [staffList, setStaffList] = useState([]);
-    const [items, setItems] = useState([]); // Inventory
+    const [items, setItems] = useState([]);
 
-    // New Job Form
+    // Form & Cart
     const [form, setForm] = useState({ vehicle_number: '', customer_name: '', customer_phone: '', staff_id: '', service_charge: 0 });
     const [cart, setCart] = useState([]);
     const [itemSearch, setItemSearch] = useState('');
@@ -29,18 +29,27 @@ const RepairManager = () => {
     const [quickPrice, setQuickPrice] = useState('');
     const [quickPurchasePrice, setQuickPurchasePrice] = useState('');
 
+    // === NEW: QUICK STAFF MODAL STATE ===
+    const [showStaffModal, setShowStaffModal] = useState(false);
+    const [newStaff, setNewStaff] = useState({ name: '', phone: '', password: '' });
+
     // Load Initial Data
+    const fetchStaff = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await api.get('/shop-users?type=staff', { headers: { Authorization: `Bearer ${token}` } });
+            if (res.data.status) setStaffList(res.data.data);
+        } catch (e) { console.error(e); }
+    };
+
     useEffect(() => {
         const loadInit = async () => {
-            try {
-                const token = localStorage.getItem('token');
-                const [staffRes, itemRes] = await Promise.all([
-                    api.get('/shop-users?type=staff', { headers: { Authorization: `Bearer ${token}` } }),
-                    api.get('/items?page=1', { headers: { Authorization: `Bearer ${token}` } })
-                ]);
-                if (staffRes.data.status) setStaffList(staffRes.data.data);
-                if (itemRes.data.status) setItems(itemRes.data.data.data);
-            } catch (e) { console.error(e); }
+            const token = localStorage.getItem('token');
+            const [itemRes] = await Promise.all([
+                api.get('/items?page=1', { headers: { Authorization: `Bearer ${token}` } })
+            ]);
+            if (itemRes.data.status) setItems(itemRes.data.data.data);
+            fetchStaff(); // Fetch staff separately
         };
         loadInit();
     }, []);
@@ -51,7 +60,6 @@ const RepairManager = () => {
             setLoading(true);
             try {
                 const token = localStorage.getItem('token');
-                // If history, use search param. If approvals, search is usually not needed or handled separately.
                 const searchParam = view === 'history' ? `&search=${historySearch}` : '';
                 const status = view === 'approvals' ? 'pending' : 'completed';
 
@@ -64,7 +72,6 @@ const RepairManager = () => {
         };
 
         if (view === 'history' || view === 'approvals') {
-            // Debounce for history search
             const timer = setTimeout(() => { fetchList(); }, 500);
             return () => clearTimeout(timer);
         }
@@ -120,13 +127,34 @@ const RepairManager = () => {
                 const updatedItem = { ...pendingItem, ...updateData };
                 setItems(prev => prev.map(i => i.id === updatedItem.id ? updatedItem : i));
                 if(cart.find(c=>c.id===updatedItem.id)) {
-                    setCart(prev => prev.map(c => c.id === updatedItem.id ? {...c, quantity: c.quantity} : c)); // Just refresh reference
+                    setCart(prev => prev.map(c => c.id === updatedItem.id ? {...c, quantity: c.quantity} : c));
                 } else {
                      setCart([...cart, { ...updatedItem, quantity: 1 }]);
                 }
                 setShowStockModal(false);
             }
         } catch (err) { toast.error('Failed'); }
+    };
+
+    // --- QUICK ADD STAFF LOGIC ---
+    const handleAddStaff = async (e) => {
+        e.preventDefault();
+        try {
+            const token = localStorage.getItem('token');
+            const res = await api.post('/shop-users', {
+                name: newStaff.name,
+                phone: newStaff.phone,
+                password: newStaff.password,
+                type: 'staff'
+            }, { headers: { Authorization: `Bearer ${token}` } });
+
+            if (res.data.status) {
+                toast.success('Staff Added!');
+                setShowStaffModal(false);
+                setNewStaff({ name: '', phone: '', password: '' });
+                fetchStaff(); // Refresh Dropdown
+            }
+        } catch (error) { toast.error(error.response?.data?.message || 'Failed'); }
     };
 
     // --- SUBMIT JOB ---
@@ -145,7 +173,7 @@ const RepairManager = () => {
         } catch(e) { toast.error(e.response?.data?.message || 'Failed'); }
     };
 
-    // --- APPROVE LOGIC ---
+    // --- ACTIONS ---
     const handleApprove = async (id) => {
         if(!window.confirm('Approve? Stock will be deducted.')) return;
         try {
@@ -153,11 +181,11 @@ const RepairManager = () => {
             const res = await api.post(`/repairs/${id}/approve`, {}, { headers: { Authorization: `Bearer ${token}` } });
             if (res.data.status) {
                 toast.success('Approved!');
-                // Refresh approval list
+                // Refresh approval list logic can be better optimized, but refetching specific view works.
                 const res2 = await api.get(`/repairs?status=pending`, { headers: { Authorization: `Bearer ${token}` } });
                 setApprovalList(res2.data.data.data);
             }
-        } catch(e) { toast.error(e.response?.data?.message || 'Failed'); }
+        } catch(e) { toast.error('Failed'); }
     };
 
     const handleDelete = async (id) => {
@@ -202,18 +230,22 @@ const RepairManager = () => {
                                 <div className="col-6"><label className="small">Phone</label><input className="form-control form-control-sm" value={form.customer_phone} onChange={e => setForm({...form, customer_phone: e.target.value})} /></div>
                             </div>
                             <div className="mb-3">
-                                <label className="small fw-bold">Mechanic *</label>
-                                <select className="form-select" value={form.staff_id} onChange={e => setForm({...form, staff_id: e.target.value})}>
-                                    <option value="">-- Select Staff --</option>
-                                    {staffList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                </select>
+                                <label className="small fw-bold">Assigned Mechanic *</label>
+                                <div className="input-group">
+                                    <select className="form-select" value={form.staff_id} onChange={e => setForm({...form, staff_id: e.target.value})}>
+                                        <option value="">-- Select Staff --</option>
+                                        {staffList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    </select>
+                                    {/* QUICK ADD STAFF BUTTON */}
+                                    <button className="btn btn-outline-primary" onClick={() => setShowStaffModal(true)}>+ New</button>
+                                </div>
                             </div>
                         </div>
 
                         {/* ITEM LIST */}
                         <div className="card shadow-sm p-3 bg-white flex-grow-1 d-flex flex-column" style={{minHeight: '400px'}}>
                             <h6 className="fw-bold border-bottom pb-2">Select Parts</h6>
-                            <input className="form-control mb-2" placeholder="🔍 Search Part..." value={itemSearch} onChange={e => setItemSearch(e.target.value)}/>
+                            <input className="form-control mb-2" placeholder="🔍 Search by Name, No, Model..." value={itemSearch} onChange={e => setItemSearch(e.target.value)}/>
 
                             <div className="flex-grow-1 overflow-auto border rounded p-2" style={{maxHeight: '300px'}}>
                                 <div className="list-group">
@@ -221,7 +253,7 @@ const RepairManager = () => {
                                         <div key={i.id} className="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onClick={() => addToCart(i)} style={{cursor: 'pointer'}}>
                                             <div>
                                                 <strong>{i.item_name}</strong>
-                                                <div className="small text-muted">{i.part_number ? `Part: ${i.part_number}` : ''} {i.category?.name}</div>
+                                                <div className="small text-muted">{i.part_number ? `Part: ${i.part_number} | ` : ''} {i.category?.name}</div>
                                                 <div className="small text-secondary fst-italic">{i.compatible_models}</div>
                                             </div>
                                             <div className="text-end">
@@ -268,7 +300,7 @@ const RepairManager = () => {
                 </div>
             )}
 
-            {/* APPROVALS VIEW */}
+            {/* APPROVALS VIEW (Same as before) */}
             {view === 'approvals' && (
                 <div className="table-responsive bg-white shadow-sm border rounded">
                     <table className="table table-hover mb-0 align-middle">
@@ -286,7 +318,7 @@ const RepairManager = () => {
                                     <td className="fw-bold">₹{r.grand_total}</td>
                                     <td>
                                         <button className="btn btn-sm btn-success me-2" onClick={() => handleApprove(r.id)}>Approve</button>
-                                        <button className="btn btn-sm btn-danger" onClick={() => handleDelete(r.id)}>Reject</button>
+                                        <button className="btn btn-sm btn-danger" onClick={() => handleDelete(r.id)}>Delete</button>
                                     </td>
                                 </tr>
                             ))}
@@ -332,8 +364,22 @@ const RepairManager = () => {
                         <div className="col-6"><label className="small">New Stock</label><input type="number" className="form-control" value={quickStock} onChange={e => setQuickStock(e.target.value)} /></div>
                         <div className="col-6"><label className="small">Price</label><input type="number" className="form-control" value={quickPrice} onChange={e => setQuickPrice(e.target.value)} /></div>
                     </div>
+                    <Form.Group className="mt-2"><label className="small">Purchase Price (Opt)</label><input type="number" className="form-control" value={quickPurchasePrice} onChange={e => setQuickPurchasePrice(e.target.value)} /></Form.Group>
                 </Modal.Body>
                 <Modal.Footer><Button variant="primary" onClick={handleQuickUpdate}>Update</Button></Modal.Footer>
+            </Modal>
+
+            {/* STAFF ADD MODAL */}
+            <Modal show={showStaffModal} onHide={() => setShowStaffModal(false)} centered>
+                <Modal.Header closeButton><Modal.Title>Add Staff</Modal.Title></Modal.Header>
+                <Modal.Body>
+                    <Form onSubmit={handleAddStaff}>
+                        <Form.Group className="mb-2"><label>Name</label><input className="form-control" required value={newStaff.name} onChange={e => setNewStaff({...newStaff, name: e.target.value})} /></Form.Group>
+                        <Form.Group className="mb-2"><label>Mobile</label><input className="form-control" required value={newStaff.phone} onChange={e => setNewStaff({...newStaff, phone: e.target.value})} /></Form.Group>
+                        <Form.Group className="mb-2"><label>Password</label><input className="form-control" required value={newStaff.password} onChange={e => setNewStaff({...newStaff, password: e.target.value})} /></Form.Group>
+                        <Button className="w-100 mt-2" type="submit">Create</Button>
+                    </Form>
+                </Modal.Body>
             </Modal>
         </div>
     );

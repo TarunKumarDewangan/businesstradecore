@@ -12,6 +12,9 @@ class ItemController extends Controller
     /**
      * 1. List Items (With Purchase Price)
      */
+    /**
+     * 1. List Items (Updated with Category Search)
+     */
     public function index(Request $request)
     {
         $user = Auth::user();
@@ -19,10 +22,17 @@ class ItemController extends Controller
 
         if ($request->has('search') && !empty($request->search)) {
             $search = $request->search;
+
             $query->where(function ($q) use ($search) {
+                // 1. Search Item Fields
                 $q->where('item_name', 'LIKE', "%{$search}%")
                     ->orWhere('part_number', 'LIKE', "%{$search}%")
-                    ->orWhere('compatible_models', 'LIKE', "%{$search}%");
+                    ->orWhere('compatible_models', 'LIKE', "%{$search}%")
+
+                    // 2. Search Linked Category Name
+                    ->orWhereHas('category', function ($subQuery) use ($search) {
+                        $subQuery->where('name', 'LIKE', "%{$search}%");
+                    });
             });
         }
 
@@ -31,7 +41,7 @@ class ItemController extends Controller
             'item_name',
             'part_number',
             'category_id',
-            'subcategory_id', // Make sure to select this
+            'subcategory_id',
             'location_id',
             'purchase_price',
             'selling_price',

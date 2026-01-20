@@ -160,10 +160,13 @@ const ItemManager = () => {
                 <Button variant="success" className="fw-bold" onClick={openAddModal}>+ ADD NEW PART</Button>
             </div>
 
-            <input
-                type="text" className="form-control form-control-lg mb-3 shadow-sm border-primary"
-                placeholder="🔍 Search by Name, Part Number, or Model..."
-                value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+           <input
+                type="text"
+                className="form-control form-control-lg mb-3 shadow-sm border-primary"
+                // Updated Placeholder Text
+                placeholder="🔍 Search by Name, Category, Part No..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
             />
 
             {isInitialLoading ? <Loader /> : (
